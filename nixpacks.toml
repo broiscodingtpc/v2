@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ['nodejs_18', 'pnpm']
+
+[phases.install]
+cmds = ['pnpm install --frozen-lockfile']
+
+[phases.build]
+dependsOn = ['install']
+
+[start]
+cmd = 'echo "Please specify the correct start command in your railway.json"'
