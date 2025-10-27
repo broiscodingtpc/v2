@@ -42,8 +42,20 @@ export interface PriceData {
   source: 'dexscreener' | 'coingecko' | 'coinmarketcap';
 }
 
-// Social Media Types
+// Add TrendingTopic interface
+export interface TrendingTopic {
+  topic: string;
+  mentions: number;
+  sentiment: number;
+  volume: number;
+  volume24h?: number;
+  volumeChange?: number;
+  engagement?: number;
+  timestamp: Date;
+}
 export interface SocialMetrics {
+  id?: string;
+  tokenId?: string;
   tokenAddress: string;
   platform: 'twitter' | 'telegram' | 'discord' | 'reddit';
   mentions: number;
@@ -52,6 +64,7 @@ export interface SocialMetrics {
   followers: number;
   influencerMentions: number;
   hashtagCount: number;
+  posts?: number;
   timestamp: Date;
 }
 
@@ -68,6 +81,12 @@ export interface Tweet {
   sentiment: number;
   confidence: number;
   tokens: string[];
+  publicMetrics?: {
+    likeCount: number;
+    retweetCount: number;
+    replyCount: number;
+    quoteCount: number;
+  };
 }
 
 export interface SocialPost {
@@ -87,7 +106,7 @@ export interface SocialPost {
 export interface AIAnalysis {
   id: string;
   tokenId: string;
-  type: 'technical' | 'fundamental' | 'sentiment' | 'social';
+  type: 'technical' | 'fundamental' | 'sentiment' | 'social' | 'comprehensive';
   analysis: string;
   confidence: number;
   sentiment: number;
@@ -152,10 +171,13 @@ export interface AIAnalysisJob {
 }
 
 export interface SignalGenerationJob {
-  tokenId: string;
-  analyses: AIAnalysis[];
-  marketData: TokenMetrics;
-  socialData: SocialMetrics[];
+  tokenId?: string;
+  tokenAddresses?: string[];
+  signalTypes?: SignalType[];
+  analyses?: AIAnalysis[];
+  marketData?: TokenMetrics;
+  socialData?: SocialMetrics[];
+  batchId?: string;
 }
 
 // API Response Types
@@ -256,6 +278,14 @@ export interface SignalUpdateMessage {
 }
 
 // Health Check Types
+// Health Monitoring Types
+export interface HealthMetric {
+  value: number;
+  unit: string;
+  status: 'healthy' | 'warning' | 'critical';
+  timestamp: Date;
+}
+
 export interface HealthStatus {
   status: 'healthy' | 'degraded' | 'unhealthy';
   timestamp: Date;
@@ -339,4 +369,76 @@ export interface Alert {
   triggeredAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Signal Types
+export type SignalType = 'technical' | 'momentum' | 'volume' | 'social' | 'ai';
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+export interface Signal {
+  id: string;
+  tokenAddress: string;
+  type: SignalType;
+  action: 'buy' | 'sell' | 'hold' | 'watch';
+  strength: number;
+  confidence: number;
+  price: number;
+  targetPrice?: number | null;
+  stopLoss?: number | null;
+  timeframe: string;
+  riskLevel?: RiskLevel;
+  reasoning?: string;
+  metadata?: Record<string, any>;
+  createdAt: Date;
+  expiresAt?: Date | null;
+}
+
+// AI Analysis Result Types used by processors
+export interface TechnicalAnalysis {
+  tokenAddress: string;
+  timeframe: string;
+  indicators?: Record<string, any>;
+  signals: string[];
+  support?: number | null;
+  resistance?: number | null;
+  trend: 'bullish' | 'bearish' | 'neutral';
+  strength: number;
+  recommendation: 'buy' | 'sell' | 'hold';
+  confidence: number;
+  analysis: string;
+  timestamp: Date;
+}
+
+export interface SentimentAnalysis {
+  tokenAddress: string;
+  overall: number;
+  social: number;
+  news: number;
+  technical: number;
+  factors: string[];
+  confidence: number;
+  summary: string;
+  timestamp: Date;
+}
+
+// DB AI Analysis record shape (Prisma-compatible)
+export interface AIAnalysisRecord {
+  tokenAddress: string;
+  type: 'comprehensive' | string;
+  summary: string;
+  keyPoints: string[];
+  riskLevel: 'low' | 'medium' | 'high';
+  timeHorizon: string;
+  confidence: number;
+  recommendation: 'buy' | 'sell' | 'hold';
+  targetPrice?: number | null;
+  stopLoss?: number | null;
+  metadata?: Record<string, any>;
+  timestamp: Date;
+}
+
+// Cleanup job payload definition
+export interface CleanupJob {
+  cleanupTypes: string[];
+  batchId: string;
 }

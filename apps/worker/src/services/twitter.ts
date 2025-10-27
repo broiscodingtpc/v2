@@ -200,11 +200,14 @@ export class TwitterService {
 
         metrics.push({
           tokenId: symbol,
+          tokenAddress: symbol, // Using symbol as tokenAddress for now
           platform: 'twitter',
           mentions: recentTweets.length,
           sentiment: avgSentiment,
           engagement: totalEngagement,
           followers: totalFollowers,
+          influencerMentions: 0, // Default value
+          hashtagCount: 0, // Default value
           posts: recentTweets.length,
           timestamp: new Date()
         });

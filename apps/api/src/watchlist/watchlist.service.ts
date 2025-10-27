@@ -12,11 +12,7 @@ export class WatchlistService {
           include: {
             pairs: {
               take: 1,
-              orderBy: { volume24h: 'desc' },
-            },
-            signalScores: {
-              orderBy: { createdAt: 'desc' },
-              take: 1,
+              orderBy: { vol24h: 'desc' },
             },
           },
         },
@@ -24,41 +20,42 @@ export class WatchlistService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return watchlistItems.map(item => ({
-      id: item.id,
-      addedAt: item.createdAt.toISOString(),
-      alertsEnabled: item.alertsEnabled,
-      priceAlertThreshold: item.priceAlertThreshold,
-      token: {
-        address: item.token.address,
-        symbol: item.token.symbol,
-        name: item.token.name,
-        price: item.token.price,
-        marketCap: item.token.marketCap,
-        volume24h: item.token.volume24h,
-        priceChange24h: item.token.priceChange24h,
-        logoUrl: item.token.logoUrl,
-        pairs: item.token.pairs.map(pair => ({
-          address: pair.address,
-          dex: pair.dex,
-          volume24h: pair.volume24h,
-          liquidity: pair.liquidity,
-        })),
-        latestScore: item.token.signalScores[0] ? {
-          socialScore: item.token.signalScores[0].socialScore,
-          technicalScore: item.token.signalScores[0].technicalScore,
-          overallScore: item.token.signalScores[0].overallScore,
-        } : null,
-      },
-    }));
+    return watchlistItems.map((item) => {
+      const prefs = (item.alertPrefs || {}) as Record<string, any>;
+      const topPair = item.token.pairs[0];
+      return {
+        id: item.id,
+        addedAt: item.createdAt.toISOString(),
+        alertsEnabled: Boolean(prefs.alertsEnabled),
+        priceAlertThreshold:
+          typeof prefs.priceAlertThreshold === 'number' ? prefs.priceAlertThreshold : undefined,
+        token: {
+          address: item.token.mint,
+          symbol: item.token.symbol ?? '',
+          name: item.token.name ?? '',
+          price: topPair ? Number(topPair.price) : 0,
+          marketCap: null,
+          volume24h: topPair ? Number(topPair.vol24h) : 0,
+          priceChange24h: null,
+          logoUrl: null,
+          pairs: item.token.pairs.map((pair) => ({
+            address: pair.id,
+            dex: pair.dexId,
+            volume24h: Number(pair.vol24h),
+            liquidity: Number(pair.liqUsd),
+          })),
+          latestScore: null,
+        },
+      };
+    });
   }
 
   async addToWatchlist(userId: string, addWatchlistDto: AddWatchlistDto) {
-    const { tokenAddress, alertsEnabled, priceAlertThreshold } = addWatchlistDto;
+    const { mint, alertPrefs } = addWatchlistDto;
 
     // Check if token exists
     const token = await prisma.token.findUnique({
-      where: { address: tokenAddress },
+      where: { mint },
     });
 
     if (!token) {
@@ -66,12 +63,10 @@ export class WatchlistService {
     }
 
     // Check if already in watchlist
-    const existingItem = await prisma.watchlistItem.findUnique({
+    const existingItem = await prisma.watchlistItem.findFirst({
       where: {
-        userId_tokenAddress: {
-          userId,
-          tokenAddress,
-        },
+        userId,
+        tokenId: token.id,
       },
     });
 
@@ -82,51 +77,45 @@ export class WatchlistService {
     const watchlistItem = await prisma.watchlistItem.create({
       data: {
         userId,
-        tokenAddress,
-        alertsEnabled: alertsEnabled || false,
-        priceAlertThreshold,
+        tokenId: token.id,
+        alertPrefs: alertPrefs || {},
       },
       include: {
         token: {
           include: {
             pairs: {
               take: 1,
-              orderBy: { volume24h: 'desc' },
-            },
-            signalScores: {
-              orderBy: { createdAt: 'desc' },
-              take: 1,
+              orderBy: { vol24h: 'desc' },
             },
           },
         },
       },
     });
 
+    const prefs = (watchlistItem.alertPrefs || {}) as Record<string, any>;
+    const topPair = watchlistItem.token.pairs[0];
     return {
       id: watchlistItem.id,
       addedAt: watchlistItem.createdAt.toISOString(),
-      alertsEnabled: watchlistItem.alertsEnabled,
-      priceAlertThreshold: watchlistItem.priceAlertThreshold,
+      alertsEnabled: Boolean(prefs.alertsEnabled),
+      priceAlertThreshold:
+        typeof prefs.priceAlertThreshold === 'number' ? prefs.priceAlertThreshold : undefined,
       token: {
-        address: watchlistItem.token.address,
-        symbol: watchlistItem.token.symbol,
-        name: watchlistItem.token.name,
-        price: watchlistItem.token.price,
-        marketCap: watchlistItem.token.marketCap,
-        volume24h: watchlistItem.token.volume24h,
-        priceChange24h: watchlistItem.token.priceChange24h,
-        logoUrl: watchlistItem.token.logoUrl,
-        pairs: watchlistItem.token.pairs.map(pair => ({
-          address: pair.address,
-          dex: pair.dex,
-          volume24h: pair.volume24h,
-          liquidity: pair.liquidity,
+        address: watchlistItem.token.mint,
+        symbol: watchlistItem.token.symbol ?? '',
+        name: watchlistItem.token.name ?? '',
+        price: topPair ? Number(topPair.price) : 0,
+        marketCap: null,
+        volume24h: topPair ? Number(topPair.vol24h) : 0,
+        priceChange24h: null,
+        logoUrl: null,
+        pairs: watchlistItem.token.pairs.map((pair) => ({
+          address: pair.id,
+          dex: pair.dexId,
+          volume24h: Number(pair.vol24h),
+          liquidity: Number(pair.liqUsd),
         })),
-        latestScore: watchlistItem.token.signalScores[0] ? {
-          socialScore: watchlistItem.token.signalScores[0].socialScore,
-          technicalScore: watchlistItem.token.signalScores[0].technicalScore,
-          overallScore: watchlistItem.token.signalScores[0].overallScore,
-        } : null,
+        latestScore: null,
       },
     };
   }
@@ -166,50 +155,54 @@ export class WatchlistService {
       throw new NotFoundException('Watchlist item not found');
     }
 
+    const existingPrefs = (watchlistItem.alertPrefs ?? {}) as Record<string, any>;
+    const newPrefs = {
+      ...existingPrefs,
+      ...(updates.alertsEnabled !== undefined ? { alertsEnabled: updates.alertsEnabled } : {}),
+      ...(updates.priceAlertThreshold !== undefined
+        ? { priceAlertThreshold: updates.priceAlertThreshold }
+        : {}),
+    } as Record<string, any>;
+
     const updatedItem = await prisma.watchlistItem.update({
       where: { id: watchlistItemId },
-      data: updates,
+      data: { alertPrefs: newPrefs },
       include: {
         token: {
           include: {
             pairs: {
               take: 1,
-              orderBy: { volume24h: 'desc' },
-            },
-            signalScores: {
-              orderBy: { createdAt: 'desc' },
-              take: 1,
+              orderBy: { vol24h: 'desc' },
             },
           },
         },
       },
     });
 
+    const prefs = (updatedItem.alertPrefs || {}) as Record<string, any>;
+    const topPair = updatedItem.token.pairs[0];
     return {
       id: updatedItem.id,
       addedAt: updatedItem.createdAt.toISOString(),
-      alertsEnabled: updatedItem.alertsEnabled,
-      priceAlertThreshold: updatedItem.priceAlertThreshold,
+      alertsEnabled: Boolean(prefs.alertsEnabled),
+      priceAlertThreshold:
+        typeof prefs.priceAlertThreshold === 'number' ? prefs.priceAlertThreshold : undefined,
       token: {
-        address: updatedItem.token.address,
-        symbol: updatedItem.token.symbol,
-        name: updatedItem.token.name,
-        price: updatedItem.token.price,
-        marketCap: updatedItem.token.marketCap,
-        volume24h: updatedItem.token.volume24h,
-        priceChange24h: updatedItem.token.priceChange24h,
-        logoUrl: updatedItem.token.logoUrl,
-        pairs: updatedItem.token.pairs.map(pair => ({
-          address: pair.address,
-          dex: pair.dex,
-          volume24h: pair.volume24h,
-          liquidity: pair.liquidity,
+        address: updatedItem.token.mint,
+        symbol: updatedItem.token.symbol ?? '',
+        name: updatedItem.token.name ?? '',
+        price: topPair ? Number(topPair.price) : 0,
+        marketCap: null,
+        volume24h: topPair ? Number(topPair.vol24h) : 0,
+        priceChange24h: null,
+        logoUrl: null,
+        pairs: updatedItem.token.pairs.map((pair) => ({
+          address: pair.id,
+          dex: pair.dexId,
+          volume24h: Number(pair.vol24h),
+          liquidity: Number(pair.liqUsd),
         })),
-        latestScore: updatedItem.token.signalScores[0] ? {
-          socialScore: updatedItem.token.signalScores[0].socialScore,
-          technicalScore: updatedItem.token.signalScores[0].technicalScore,
-          overallScore: updatedItem.token.signalScores[0].overallScore,
-        } : null,
+        latestScore: null,
       },
     };
   }

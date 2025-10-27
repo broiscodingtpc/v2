@@ -279,6 +279,146 @@ export class AIService {
   }
 
   /**
+   * Generate a comprehensive AI analysis summary for a token
+   */
+  async generateComprehensiveAnalysis(tokenData: any): Promise<{
+    summary: string;
+    keyPoints: string[];
+    riskLevel: 'low' | 'medium' | 'high';
+    timeHorizon: string;
+    confidence: number;
+    recommendation: 'buy' | 'sell' | 'hold';
+    targetPrice?: number | undefined;
+    stopLoss?: number | undefined;
+    model?: string | undefined;
+    processingTime?: number | undefined;
+    dataQuality?: 'low' | 'medium' | 'high';
+    factors?: string[];
+  }> {
+    try {
+      const start = Date.now();
+      const tokenId = tokenData?.token?.address || tokenData?.token?.id || 'unknown';
+
+      // Build a concise prompt leveraging existing market and social data
+      const prompt = `
+Create a comprehensive analysis for token ${tokenId} using the provided context.
+Include: summary, 5 key points, risk level (low/medium/high), time horizon,
+confidence (0-1), recommendation (buy/sell/hold), optional target/stop.
+Be conservative and avoid overfitting.
+`;
+
+      let text = '';
+      let model: string | undefined = 'unknown';
+
+      if (this.groq && this.canMakeRequest('groq')) {
+        const response = await this.groq.chat.completions.create({
+          messages: [{ role: 'user', content: prompt }],
+          model: config.GROQ_MODEL,
+          temperature: 0.3,
+          max_tokens: 600
+        });
+        text = response.choices[0]?.message?.content || '';
+        model = 'groq-' + config.GROQ_MODEL;
+        this.updateRequestCount('groq');
+      } else if (this.gemini && this.canMakeRequest('gemini')) {
+        const geminiModel = this.gemini.getGenerativeModel({ model: config.GEMINI_MODEL });
+        const response = await geminiModel.generateContent(prompt);
+        text = response.response.text();
+        model = 'gemini-' + config.GEMINI_MODEL;
+        this.updateRequestCount('gemini');
+      } else {
+        // Fallback: synthesize from token data heuristics
+        const price = tokenData?.token?.price ?? 0;
+        const change = tokenData?.token?.priceChange24h ?? 0;
+        const vol = tokenData?.token?.volume24h ?? 0;
+        text = `Summary: Price ${price}, 24h Change ${change}%, Volume ${vol}.`;
+      }
+
+      // Simple parsing using existing helpers
+      const riskLevel = this.determineRiskLevel(text, 0.6);
+      const confidenceMatch = text.match(/confidence[:\s]+([0-9.]+)/i);
+      const confidence = confidenceMatch ? Math.max(0, Math.min(1, parseFloat(confidenceMatch[1]))) : 0.6;
+      const recMatch = text.match(/(BUY|SELL|HOLD)/i);
+      const recommendation = (recMatch?.[1]?.toLowerCase() as 'buy' | 'sell' | 'hold') || 'hold';
+      const tpMatch = text.match(/target[:\s]+\$?([0-9.]+)/i);
+      const slMatch = text.match(/stop[:\s]+\$?([0-9.]+)/i);
+
+      const keyPoints = (text
+        .split(/\n|\r/)
+        .map(l => l.trim())
+        .filter(l => l.length > 0)
+        .slice(0, 5));
+
+      return {
+        summary: text.substring(0, 600),
+        keyPoints,
+        riskLevel,
+        timeHorizon: '24h',
+        confidence,
+        recommendation,
+        targetPrice: tpMatch ? parseFloat(tpMatch[1]) : undefined,
+        stopLoss: slMatch ? parseFloat(slMatch[1]) : undefined,
+        model: model || 'unknown',
+        processingTime: Date.now() - start,
+        dataQuality: 'medium',
+        factors: this.extractSignals(text)
+      };
+    } catch (error) {
+      log.error('Failed to generate comprehensive analysis', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a short market overview analysis
+   */
+  async generateMarketOverview(marketData: any): Promise<{
+    summary: string;
+    riskLevel: 'low' | 'medium' | 'high';
+    confidence: number;
+  }> {
+    try {
+      const prompt = `
+Provide a brief market overview with risk level and confidence.
+Focus on top performers, average price changes, and liquidity.
+`;
+
+      let text = '';
+      if (this.groq && this.canMakeRequest('groq')) {
+        const response = await this.groq.chat.completions.create({
+          messages: [{ role: 'user', content: prompt }],
+          model: config.GROQ_MODEL,
+          temperature: 0.3,
+          max_tokens: 300
+        });
+        text = response.choices[0]?.message?.content || '';
+        this.updateRequestCount('groq');
+      } else if (this.gemini && this.canMakeRequest('gemini')) {
+        const geminiModel = this.gemini.getGenerativeModel({ model: config.GEMINI_MODEL });
+        const response = await geminiModel.generateContent(prompt);
+        text = response.response.text();
+        this.updateRequestCount('gemini');
+      } else {
+        const stats = marketData?.statistics || {};
+        text = `Overview: avgChange=${stats.avgPriceChange ?? 0}%, liquidity=${stats.totalVolume ?? 0}.`;
+      }
+
+      const confidenceMatch = text.match(/confidence[:\s]+([0-9.]+)/i);
+      const confidence = confidenceMatch ? Math.max(0, Math.min(1, parseFloat(confidenceMatch[1]))) : 0.6;
+      const riskLevel = this.determineRiskLevel(text, confidence);
+
+      return {
+        summary: text.substring(0, 600),
+        riskLevel,
+        confidence
+      };
+    } catch (error) {
+      log.error('Failed to generate market overview', error);
+      throw error;
+    }
+  }
+
+  /**
    * Prepare technical data for analysis
    */
   private prepareTechnicalData(priceData: PriceData[]) {

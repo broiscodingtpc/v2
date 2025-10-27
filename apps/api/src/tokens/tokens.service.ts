@@ -5,26 +5,30 @@ import { TokensQueryDto, TrendingQueryDto } from '@metapulse/shared';
 @Injectable()
 export class TokensService {
   async searchTokens(query: TokensQueryDto) {
-    const { search, limit = 20, offset = 0 } = query;
-    
-    const where = search ? {
-      OR: [
-        { symbol: { contains: search, mode: 'insensitive' as const } },
-        { name: { contains: search, mode: 'insensitive' as const } },
-        { address: { contains: search, mode: 'insensitive' as const } },
-      ],
-    } : {};
+    const { limit = 20 } = query;
+    const offset = (query as any).offset ?? 0;
+    const search = (query as any).search as string | undefined;
+
+    const where = search
+      ? {
+          OR: [
+            { symbol: { contains: search, mode: 'insensitive' as const } },
+            { name: { contains: search, mode: 'insensitive' as const } },
+            { mint: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
 
     const [tokens, total] = await Promise.all([
       prisma.token.findMany({
         where,
         take: limit,
         skip: offset,
-        orderBy: { marketCap: 'desc' },
+        orderBy: { lastSeenAt: 'desc' },
         include: {
           pairs: {
             take: 1,
-            orderBy: { volume24h: 'desc' },
+            orderBy: { vol24h: 'desc' },
           },
         },
       }),
@@ -32,22 +36,25 @@ export class TokensService {
     ]);
 
     return {
-      tokens: tokens.map(token => ({
-        address: token.address,
-        symbol: token.symbol,
-        name: token.name,
-        price: token.price,
-        marketCap: token.marketCap,
-        volume24h: token.volume24h,
-        priceChange24h: token.priceChange24h,
-        logoUrl: token.logoUrl,
-        pairs: token.pairs.map(pair => ({
-          address: pair.address,
-          dex: pair.dex,
-          volume24h: pair.volume24h,
-          liquidity: pair.liquidity,
-        })),
-      })),
+      tokens: tokens.map((token) => {
+        const topPair = token.pairs[0];
+        return {
+          address: token.mint,
+          symbol: token.symbol ?? '',
+          name: token.name ?? '',
+          price: topPair ? Number(topPair.price) : 0,
+          marketCap: null,
+          volume24h: topPair ? Number(topPair.vol24h) : 0,
+          priceChange24h: null,
+          logoUrl: null,
+          pairs: token.pairs.map((pair) => ({
+            address: pair.id,
+            dex: pair.dexId,
+            volume24h: Number(pair.vol24h),
+            liquidity: Number(pair.liqUsd),
+          })),
+        };
+      }),
       pagination: {
         total,
         limit,
@@ -58,13 +65,11 @@ export class TokensService {
   }
 
   async getTrendingTokens(query: TrendingQueryDto) {
-    const { timeframe = '24h', limit = 10 } = query;
-    
-    // Calculate time threshold based on timeframe
+    const { window = '24h', limit = 10 } = query as any;
+
     const now = new Date();
     let timeThreshold: Date;
-    
-    switch (timeframe) {
+    switch (window) {
       case '1h':
         timeThreshold = new Date(now.getTime() - 60 * 60 * 1000);
         break;
@@ -79,59 +84,56 @@ export class TokensService {
 
     const tokens = await prisma.token.findMany({
       where: {
-        updatedAt: { gte: timeThreshold },
-        priceChange24h: { gt: 0 }, // Only tokens with positive price change
+        pairs: {
+          some: { updatedAt: { gte: timeThreshold } },
+        },
       },
       take: limit,
-      orderBy: [
-        { priceChange24h: 'desc' },
-        { volume24h: 'desc' },
-      ],
+      orderBy: { lastSeenAt: 'desc' },
       include: {
         pairs: {
           take: 1,
-          orderBy: { volume24h: 'desc' },
+          orderBy: { vol24h: 'desc' },
         },
       },
     });
 
-    return tokens.map(token => ({
-      address: token.address,
-      symbol: token.symbol,
-      name: token.name,
-      price: token.price,
-      marketCap: token.marketCap,
-      volume24h: token.volume24h,
-      priceChange24h: token.priceChange24h,
-      logoUrl: token.logoUrl,
-      pairs: token.pairs.map(pair => ({
-        address: pair.address,
-        dex: pair.dex,
-        volume24h: pair.volume24h,
-        liquidity: pair.liquidity,
-      })),
-    }));
+    return tokens.map((token) => {
+      const topPair = token.pairs[0];
+      return {
+        address: token.mint,
+        symbol: token.symbol ?? '',
+        name: token.name ?? '',
+        price: topPair ? Number(topPair.price) : 0,
+        marketCap: null,
+        volume24h: topPair ? Number(topPair.vol24h) : 0,
+        priceChange24h: null,
+        logoUrl: null,
+        pairs: token.pairs.map((pair) => ({
+          address: pair.id,
+          dex: pair.dexId,
+          volume24h: Number(pair.vol24h),
+          liquidity: Number(pair.liqUsd),
+        })),
+      };
+    });
   }
 
   async getHotMeta(limit = 10) {
-    // Get tokens with recent social mentions and high signal scores
     const hotTokens = await prisma.token.findMany({
       where: {
-        socialMentions: {
+        mentions: {
           some: {
             createdAt: {
-              gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+              gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
             },
           },
         },
       },
       take: limit,
-      orderBy: [
-        { volume24h: 'desc' },
-        { priceChange24h: 'desc' },
-      ],
+      orderBy: { lastSeenAt: 'desc' },
       include: {
-        socialMentions: {
+        mentions: {
           where: {
             createdAt: {
               gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
@@ -140,60 +142,55 @@ export class TokensService {
           orderBy: { createdAt: 'desc' },
           take: 3,
         },
-        signalScores: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
         pairs: {
           take: 1,
-          orderBy: { volume24h: 'desc' },
+          orderBy: { vol24h: 'desc' },
         },
       },
     });
 
-    return hotTokens.map(token => ({
-      address: token.address,
-      symbol: token.symbol,
-      name: token.name,
-      price: token.price,
-      marketCap: token.marketCap,
-      volume24h: token.volume24h,
-      priceChange24h: token.priceChange24h,
-      logoUrl: token.logoUrl,
-      socialScore: token.signalScores[0]?.socialScore || 0,
-      technicalScore: token.signalScores[0]?.technicalScore || 0,
-      overallScore: token.signalScores[0]?.overallScore || 0,
-      recentMentions: token.socialMentions.map(mention => ({
-        platform: mention.platform,
-        content: mention.content,
-        sentiment: mention.sentiment,
-        createdAt: mention.createdAt.toISOString(),
-      })),
-      pairs: token.pairs.map(pair => ({
-        address: pair.address,
-        dex: pair.dex,
-        volume24h: pair.volume24h,
-        liquidity: pair.liquidity,
-      })),
-    }));
+    return hotTokens.map((token) => {
+      const topPair = token.pairs[0];
+      return {
+        address: token.mint,
+        symbol: token.symbol ?? '',
+        name: token.name ?? '',
+        price: topPair ? Number(topPair.price) : 0,
+        marketCap: null,
+        volume24h: topPair ? Number(topPair.vol24h) : 0,
+        priceChange24h: null,
+        logoUrl: null,
+        socialScore: 0,
+        technicalScore: 0,
+        overallScore: 0,
+        recentMentions: token.mentions.map((mention) => ({
+          platform: 'twitter',
+          content: mention.author,
+          sentiment: 'neutral',
+          createdAt: mention.createdAt.toISOString(),
+        })),
+        pairs: token.pairs.map((pair) => ({
+          address: pair.id,
+          dex: pair.dexId,
+          volume24h: Number(pair.vol24h),
+          liquidity: Number(pair.liqUsd),
+        })),
+      };
+    });
   }
 
   async getTokenDetails(address: string) {
     const token = await prisma.token.findUnique({
-      where: { address },
+      where: { mint: address },
       include: {
         pairs: {
-          orderBy: { volume24h: 'desc' },
+          orderBy: { vol24h: 'desc' },
         },
-        signalScores: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-        socialMentions: {
+        mentions: {
           orderBy: { createdAt: 'desc' },
           take: 20,
         },
-        analystReports: {
+        reports: {
           orderBy: { createdAt: 'desc' },
           take: 5,
         },
@@ -205,45 +202,40 @@ export class TokensService {
     }
 
     return {
-      address: token.address,
-      symbol: token.symbol,
-      name: token.name,
-      price: token.price,
-      marketCap: token.marketCap,
-      volume24h: token.volume24h,
-      priceChange24h: token.priceChange24h,
-      logoUrl: token.logoUrl,
-      description: token.description,
-      website: token.website,
-      twitter: token.twitter,
-      telegram: token.telegram,
-      createdAt: token.createdAt.toISOString(),
-      updatedAt: token.updatedAt.toISOString(),
-      pairs: token.pairs.map(pair => ({
-        address: pair.address,
-        dex: pair.dex,
-        volume24h: pair.volume24h,
-        liquidity: pair.liquidity,
-        priceChange24h: pair.priceChange24h,
+      address: token.mint,
+      symbol: token.symbol ?? '',
+      name: token.name ?? '',
+      price: token.pairs.length ? Number(token.pairs[0].price) : 0,
+      marketCap: null,
+      volume24h: token.pairs.length ? Number(token.pairs[0].vol24h) : 0,
+      priceChange24h: null,
+      logoUrl: null,
+      description: null,
+      website: null,
+      twitter: null,
+      telegram: null,
+      createdAt: token.discoveredAt.toISOString(),
+      updatedAt: token.lastSeenAt.toISOString(),
+      pairs: token.pairs.map((pair) => ({
+        address: pair.id,
+        dex: pair.dexId,
+        volume24h: Number(pair.vol24h),
+        liquidity: Number(pair.liqUsd),
+        priceChange24h: null,
       })),
-      signalScores: token.signalScores.map(score => ({
-        socialScore: score.socialScore,
-        technicalScore: score.technicalScore,
-        overallScore: score.overallScore,
-        createdAt: score.createdAt.toISOString(),
-      })),
-      socialMentions: token.socialMentions.map(mention => ({
-        platform: mention.platform,
-        content: mention.content,
-        sentiment: mention.sentiment,
-        engagementScore: mention.engagementScore,
+      signalScores: [],
+      socialMentions: token.mentions.map((mention) => ({
+        platform: 'twitter',
+        content: mention.author,
+        sentiment: 'neutral',
+        engagementScore: mention.followers,
         createdAt: mention.createdAt.toISOString(),
       })),
-      analystReports: token.analystReports.map(report => ({
-        title: report.title,
-        summary: report.summary,
-        sentiment: report.sentiment,
-        confidenceScore: report.confidenceScore,
+      analystReports: token.reports.map((report) => ({
+        title: report.summaryShort,
+        summary: report.summaryLong,
+        sentiment: report.riskSummary,
+        confidenceScore: 0,
         createdAt: report.createdAt.toISOString(),
       })),
     };

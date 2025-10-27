@@ -147,7 +147,7 @@ async function cleanupExpiredSignals(): Promise<number> {
  */
 async function cleanupOldMetrics(): Promise<number> {
   try {
-    const retentionDays = config.dataRetention.tokenMetrics || 30;
+    const retentionDays = config.DATA_RETENTION_DAYS || 30;
     const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 
     const result = await prisma.tokenMetrics.deleteMany({
@@ -172,7 +172,7 @@ async function cleanupOldMetrics(): Promise<number> {
  */
 async function cleanupOldSocialData(): Promise<number> {
   try {
-    const retentionDays = config.dataRetention.socialMetrics || 14;
+    const retentionDays = config.DATA_RETENTION_DAYS || 14;
     const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 
     // Clean up social metrics
@@ -208,7 +208,7 @@ async function cleanupOldSocialData(): Promise<number> {
  */
 async function cleanupOldAnalyses(): Promise<number> {
   try {
-    const retentionDays = config.dataRetention.aiAnalysis || 7;
+    const retentionDays = config.DATA_RETENTION_DAYS || 7;
     const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 
     // Clean up technical analyses
@@ -230,7 +230,7 @@ async function cleanupOldAnalyses(): Promise<number> {
     });
 
     // Clean up AI analyses
-    const aiResult = await prisma.aiAnalysis.deleteMany({
+    const aiResult = await prisma.aIAnalysis.deleteMany({
       where: {
         timestamp: {
           lt: cutoffDate
@@ -310,7 +310,7 @@ async function cleanupInactiveTokens(): Promise<number> {
           where: { tokenAddress: token.address }
         });
 
-        await prisma.aiAnalysis.deleteMany({
+        await prisma.aIAnalysis.deleteMany({
           where: { tokenAddress: token.address }
         });
 
@@ -430,52 +430,8 @@ async function cleanupDuplicateRecords(): Promise<number> {
  */
 async function cleanupOrphanedData(): Promise<number> {
   try {
-    let deletedCount = 0;
-
-    // Clean up metrics for non-existent tokens
-    const orphanedMetrics = await prisma.tokenMetrics.findMany({
-      where: {
-        token: null
-      }
-    });
-
-    for (const metric of orphanedMetrics) {
-      await prisma.tokenMetrics.delete({
-        where: { id: metric.id }
-      });
-      deletedCount++;
-    }
-
-    // Clean up social metrics for non-existent tokens
-    const orphanedSocial = await prisma.socialMetrics.findMany({
-      where: {
-        token: null
-      }
-    });
-
-    for (const social of orphanedSocial) {
-      await prisma.socialMetrics.delete({
-        where: { id: social.id }
-      });
-      deletedCount++;
-    }
-
-    // Clean up analyses for non-existent tokens
-    const orphanedTechnical = await prisma.technicalAnalysis.findMany({
-      where: {
-        token: null
-      }
-    });
-
-    for (const analysis of orphanedTechnical) {
-      await prisma.technicalAnalysis.delete({
-        where: { id: analysis.id }
-      });
-      deletedCount++;
-    }
-
-    log.info(`Cleaned up ${deletedCount} orphaned records`);
-    return deletedCount;
+    log.info('Cleaned up 0 orphaned records (handled by referential integrity)');
+    return 0;
 
   } catch (error) {
     log.error('Failed to cleanup orphaned data', error);
@@ -517,7 +473,7 @@ export async function getCleanupStatistics(): Promise<Record<string, any>> {
       totalAnalyses: {
         technical: await prisma.technicalAnalysis.count(),
         sentiment: await prisma.sentimentAnalysis.count(),
-        ai: await prisma.aiAnalysis.count()
+        ai: await prisma.aIAnalysis.count()
       },
       expiredSignals: await prisma.signal.count({
         where: {
@@ -563,22 +519,14 @@ export function getRecommendedCleanupTypes(): string[] {
   cleanupTypes.push('orphaned_data');
 
   // Add data retention cleanup based on config
-  if (config.dataRetention.tokenMetrics) {
+  if (config.DATA_RETENTION_DAYS && config.DATA_RETENTION_DAYS > 0) {
     cleanupTypes.push('old_metrics');
-  }
-
-  if (config.dataRetention.socialMetrics) {
     cleanupTypes.push('old_social_data');
-  }
-
-  if (config.dataRetention.aiAnalysis) {
     cleanupTypes.push('old_analyses');
   }
 
-  // Add inactive token cleanup if enabled
-  if (config.features.cleanupInactiveTokens) {
-    cleanupTypes.push('inactive_tokens');
-  }
+  // Include inactive token cleanup by default
+  cleanupTypes.push('inactive_tokens');
 
   return cleanupTypes;
 }

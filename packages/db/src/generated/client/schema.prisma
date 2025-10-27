@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+  // Generate a package-local Prisma Client to avoid schema conflicts
+  output   = "./src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String          @id @default(cuid())
+  telegramUserId String          @unique
+  handle         String?
+  role           Role            @default(FREE)
+  status         UserStatus      @default(ACTIVE)
+  createdAt      DateTime        @default(now())
+  watchlist      WatchlistItem[]
+  apiKeys        ApiKey[]
+  alerts         UserAlertLog[]
+  authLinks      AuthLink[]
+}
+
+enum Role {
+  FREE
+  PRO
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+}
+
+model AuthLink {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  nonce     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model Token {
+  id           String          @id @default(cuid())
+  chain        String          @default("sol")
+  mint         String          @unique
+  symbol       String?
+  name         String?
+  discoveredAt DateTime        @default(now())
+  lastSeenAt   DateTime        @default(now())
+  pairs        Pair[]
+  reports      AnalystReport[]
+  vectors      VectorDoc[]
+  mentions     SocialMention[]
+  watchlist    WatchlistItem[]
+}
+
+model Pair {
+  id        String   @id @default(cuid())
+  tokenId   String
+  token     Token    @relation(fields: [tokenId], references: [id])
+  dexId     String
+  base      String
+  quote     String
+  liqUsd    Decimal  @db.Decimal(18, 6)
+  price     Decimal  @db.Decimal(24, 12)
+  vol5m     Decimal  @db.Decimal(18, 6)
+  vol1h     Decimal  @db.Decimal(18, 6)
+  vol24h    Decimal  @db.Decimal(18, 6)
+  updatedAt DateTime @default(now())
+}
+
+model WatchlistItem {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenId    String
+  user       User     @relation(fields: [userId], references: [id])
+  token      Token    @relation(fields: [tokenId], references: [id])
+  alertPrefs Json
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, tokenId])
+}
+
+model SignalEvent {
+  id         String         @id @default(cuid())
+  tokenId    String
+  pairId     String?
+  kind       String // volume_spike | liq_drop | new_pair | social_spike | whale_move
+  metrics    Json
+  occurredAt DateTime       @default(now())
+  scores     SignalScore[]
+  alerts     UserAlertLog[]
+}
+
+model SignalScore {
+  id            String      @id @default(cuid())
+  signalEventId String
+  signalEvent   SignalEvent @relation(fields: [signalEventId], references: [id])
+  score         Decimal     @db.Decimal(5, 2)
+  label         String
+  model         String      @default("groq")
+  features      Json
+  createdAt     DateTime    @default(now())
+}
+
+model AnalystReport {
+  id            String   @id @default(cuid())
+  tokenId       String
+  signalEventId String?
+  token         Token    @relation(fields: [tokenId], references: [id])
+  summaryShort  String
+  summaryLong   String
+  riskSummary   String
+  model         String   @default("gemini")
+  createdAt     DateTime @default(now())
+}
+
+model SocialMention {
+  id         String   @id @default(cuid())
+  tokenId    String
+  token      Token    @relation(fields: [tokenId], references: [id])
+  tweetId    String   @unique
+  author     String
+  followers  Int
+  engagement Json
+  createdAt  DateTime @default(now())
+}
+
+model UserAlertLog {
+  id            String      @id @default(cuid())
+  userId        String
+  signalEventId String
+  channel       String // telegram | web
+  deliveredAt   DateTime    @default(now())
+  status        String
+  failReason    String?
+  user          User        @relation(fields: [userId], references: [id])
+  signalEvent   SignalEvent @relation(fields: [signalEventId], references: [id])
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  label     String
+  hashedKey String    @unique
+  scopes    String[]
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+}
+
+model JobCursor {
+  id        String   @id @default(cuid())
+  source    String   @unique // dexscreener | twitter | ...
+  cursor    Json
+  updatedAt DateTime @default(now())
+}
+
+// Vectors (pgvector)
+model VectorDoc {
+  id        String                      @id @default(cuid())
+  tokenId   String?
+  token     Token?                      @relation(fields: [tokenId], references: [id])
+  kind      String // report | tweet | note
+  content   String
+  embedding Unsupported("vector(1536)")
+}

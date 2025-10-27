@@ -1,5 +1,7 @@
 generator client {
   provider = "prisma-client-js"
+  // Generate a package-local Prisma Client to avoid schema conflicts
+  output   = "./src/generated/client"
 }
 
 datasource db {
@@ -48,7 +50,7 @@ model Token {
   symbol       String?
   name         String?
   discoveredAt DateTime         @default(now())
-  lastSeenAt   DateTime?
+  lastSeenAt   DateTime         @default(now())
   pairs        Pair[]
   reports      AnalystReport[]
   vectors      VectorDoc[]

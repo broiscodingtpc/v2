@@ -1,11 +1,12 @@
 import Bull from 'bull';
-import { PrismaClient } from '@prisma/client';
 import { dexScreenerService } from '@/services/dexscreener';
 import { createLogger } from '@/utils/logger';
-import { TokenDataJob, PriceData, Token } from '@/types';
+import { TokenDataJob, Token, DexScreenerPair } from '@/types';
+import db from '@/database';
+// Removed sharedPrisma usage; worker uses local db schema exclusively
 
 const log = createLogger('token-processor');
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
 
 /**
  * Process token data collection job
@@ -31,7 +32,7 @@ export async function processTokenData(job: Bull.Job<TokenDataJob>): Promise<any
       processed: 0,
       failed: 0,
       tokens: [] as Token[],
-      priceData: [] as PriceData[]
+      pairs: [] as DexScreenerPair[]
     };
 
     // Process tokens in batches to manage rate limits
@@ -52,20 +53,18 @@ export async function processTokenData(job: Bull.Job<TokenDataJob>): Promise<any
       });
 
       try {
-        // Fetch price data from DexScreener
-        const priceDataBatch = await dexScreenerService.batchFetchTokenData(batch);
-        results.priceData.push(...priceDataBatch);
-
         // Process each token in the batch
-        for (const address of batch) {
-          try {
-            await processIndividualToken(address, results);
+        const processedResults = await Promise.all(batch.map(address => processIndividualToken(address)));
+
+        processedResults.forEach(result => {
+          if (result) {
+            results.tokens.push(result.token);
+            results.pairs.push(result.pair);
             results.processed++;
-          } catch (error) {
-            log.tokenError(address, 'process', error as Error);
+          } else {
             results.failed++;
           }
-        }
+        });
 
         // Rate limiting delay between batches
         if (i + batchSize < addresses.length) {
@@ -78,14 +77,13 @@ export async function processTokenData(job: Bull.Job<TokenDataJob>): Promise<any
       }
     }
 
-    // Store aggregated data
-    await storeTokenData(results.tokens, results.priceData, batchId);
+    await storeTokenData(results.tokens, results.pairs, batchId);
 
     log.info(`Token data job completed: ${batchId}`, {
       processed: results.processed,
       failed: results.failed,
       totalTokens: results.tokens.length,
-      totalPriceData: results.priceData.length
+      totalPairs: results.pairs.length
     });
 
     return {
@@ -93,7 +91,7 @@ export async function processTokenData(job: Bull.Job<TokenDataJob>): Promise<any
       processed: results.processed,
       failed: results.failed,
       tokens: results.tokens.length,
-      priceData: results.priceData.length
+      pairs: results.pairs.length
     };
 
   } catch (error) {
@@ -106,16 +104,15 @@ export async function processTokenData(job: Bull.Job<TokenDataJob>): Promise<any
  * Process individual token
  */
 async function processIndividualToken(
-  address: string, 
-  results: { tokens: Token[]; priceData: PriceData[] }
-): Promise<void> {
+  address: string
+): Promise<{ token: Token; pair: DexScreenerPair } | null> {
   try {
     // Get token pairs from DexScreener
     const pairs = await dexScreenerService.getTokenPairs(address);
     
     if (pairs.length === 0) {
       log.warn(`No pairs found for token: ${address}`);
-      return;
+      return null;
     }
 
     // Use the pair with highest liquidity
@@ -125,20 +122,22 @@ async function processIndividualToken(
 
     // Convert to internal formats
     const token = dexScreenerService.convertPairToToken(bestPair);
-    const priceData = dexScreenerService.convertPairToPriceData(bestPair);
+    // const priceData = dexScreenerService.convertPairToPriceData(bestPair);
 
-    results.tokens.push(token);
-    results.priceData.push(priceData);
+    // results.tokens.push(token);
+    // results.priceData.push(priceData);
 
-    log.tokenProcessed(address, 'fetched', {
+    log.info(`Token processed: ${address}`, {
       symbol: token.symbol,
       price: token.price,
       volume24h: token.volume24h
     });
 
+    return { token, pair: bestPair };
+
   } catch (error) {
-    log.tokenError(address, 'fetch', error as Error);
-    throw error;
+    log.error(`Failed to fetch token data for: ${address}`, error as Error);
+    return null;
   }
 }
 
@@ -195,22 +194,23 @@ function getKnownPopularTokens(network: string): string[] {
  */
 async function storeTokenData(
   tokens: Token[], 
-  priceData: PriceData[], 
+  pairs: DexScreenerPair[], 
   batchId: string
 ): Promise<void> {
   try {
     log.info(`Storing token data for batch: ${batchId}`, {
       tokens: tokens.length,
-      priceData: priceData.length
+      pairs: pairs.length
     });
 
-    // Store tokens (upsert to handle duplicates)
-    for (const token of tokens) {
-      await prisma.token.upsert({
+    // Upsert Tokens (worker schema) and store TokenMetrics snapshot
+    await Promise.all(tokens.map(async (token) => {
+      await db.token.upsert({
         where: { address: token.address },
         update: {
           symbol: token.symbol,
           name: token.name,
+          network: token.network,
           price: token.price,
           priceChange24h: token.priceChange24h,
           volume24h: token.volume24h,
@@ -218,10 +218,9 @@ async function storeTokenData(
           liquidity: token.liquidity,
           fdv: token.fdv,
           holders: token.holders,
-          updatedAt: new Date()
+          updatedAt: new Date(),
         },
         create: {
-          id: token.id,
           address: token.address,
           symbol: token.symbol,
           name: token.name,
@@ -233,37 +232,28 @@ async function storeTokenData(
           liquidity: token.liquidity,
           fdv: token.fdv,
           holders: token.holders,
-          createdAt: token.createdAt,
-          updatedAt: new Date()
-        }
+          updatedAt: new Date(),
+        },
       });
-    }
 
-    // Store price data
-    for (const data of priceData) {
-      await prisma.tokenMetrics.create({
+      await db.tokenMetrics.create({
         data: {
-          tokenAddress: data.tokenAddress,
-          price: data.price,
-          volume24h: data.volume,
-          marketCap: data.marketCap,
-          liquidity: data.liquidity,
-          priceChange1h: 0, // Not available from DexScreener
-          priceChange24h: 0, // Would need to calculate
-          priceChange7d: 0, // Would need to calculate
-          volumeChange24h: 0, // Would need to calculate
-          liquidityChange24h: 0, // Would need to calculate
-          holderCount: 0, // Not available from DexScreener
-          holderChange24h: 0, // Not available from DexScreener
-          timestamp: data.timestamp
-        }
+          tokenAddress: token.address,
+          price: token.price,
+          volume24h: token.volume24h,
+          marketCap: token.marketCap,
+          liquidity: token.liquidity,
+          priceChange24h: token.priceChange24h,
+          timestamp: new Date(),
+        },
       });
-    }
+    }));
+
+    // Shared schema writes (Token/Pair) removed to avoid mismatched Prisma clients
 
     log.info(`Successfully stored token data for batch: ${batchId}`);
-
   } catch (error) {
-    log.error(`Failed to store token data for batch: ${batchId}`, error);
+    log.error(`Failed to store token data for batch: ${batchId}`, error as Error);
     throw error;
   }
 }
@@ -274,19 +264,15 @@ async function storeTokenData(
 export async function getTokensNeedingUpdate(): Promise<string[]> {
   try {
     const cutoffTime = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
-    
-    const tokens = await prisma.token.findMany({
+    const tokens = await db.token.findMany({
       where: {
-        OR: [
-          { updatedAt: { lt: cutoffTime } },
-          { updatedAt: { equals: null } }
-        ]
+        updatedAt: { lt: cutoffTime },
       },
       select: { address: true },
-      take: 100 // Limit to prevent overwhelming the system
+      take: 100,
     });
 
-    return tokens.map(token => token.address);
+    return tokens.map((token: { address: string }) => token.address);
 
   } catch (error) {
     log.error('Failed to get tokens needing update', error);
@@ -299,19 +285,24 @@ export async function getTokensNeedingUpdate(): Promise<string[]> {
  */
 export async function calculateTechnicalIndicators(tokenAddress: string): Promise<Record<string, number>> {
   try {
-    // Get recent price data (last 50 data points)
-    const metrics = await prisma.tokenMetrics.findMany({
+    // Get recent price data (last 50 data points) from worker TokenMetrics
+    const metrics = await db.tokenMetrics.findMany({
       where: { tokenAddress },
       orderBy: { timestamp: 'desc' },
-      take: 50
+      take: 50,
+      select: {
+        price: true,
+        volume24h: true,
+        timestamp: true,
+      },
     });
 
     if (metrics.length < 10) {
       return {};
     }
 
-    const prices = metrics.map(m => m.price).reverse(); // Oldest first
-    const volumes = metrics.map(m => m.volume24h).reverse();
+    const prices = metrics.map((m) => Number(m.price)).reverse(); // Oldest first
+    const volumes = metrics.map((m) => Number(m.volume24h)).reverse();
 
     // Simple Moving Averages
     const sma10 = calculateSMA(prices, 10);
@@ -321,7 +312,7 @@ export async function calculateTechnicalIndicators(tokenAddress: string): Promis
     const rsi = calculateRSI(prices, 14);
     
     // Volume indicators
-    const avgVolume = volumes.reduce((sum, vol) => sum + vol, 0) / volumes.length;
+    const avgVolume = volumes.reduce((sum: number, vol: number) => sum + vol, 0) / volumes.length;
     const currentVolume = volumes[volumes.length - 1];
     const volumeRatio = avgVolume > 0 ? currentVolume / avgVolume : 1;
 

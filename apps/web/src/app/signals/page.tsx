@@ -194,24 +194,21 @@ export default function SignalsPage() {
                   <TableRow>
                     <TableHeaderCell>Type</TableHeaderCell>
                     <TableHeaderCell>Token</TableHeaderCell>
-                    <TableHeaderCell 
-                      onClick={() => handleSort('score')}
-                      className="cursor-pointer hover:text-ascii-amber"
-                    >
-                      Score {sortBy === 'score' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    <TableHeaderCell className="cursor-pointer hover:text-ascii-amber">
+                      <button type="button" onClick={() => handleSort('score')} className="w-full text-left">
+                        Score {sortBy === 'score' && (sortOrder === 'asc' ? '↑' : '↓')}
+                      </button>
                     </TableHeaderCell>
-                    <TableHeaderCell 
-                      onClick={() => handleSort('confidence')}
-                      className="cursor-pointer hover:text-ascii-amber"
-                    >
-                      Confidence {sortBy === 'confidence' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    <TableHeaderCell className="cursor-pointer hover:text-ascii-amber">
+                      <button type="button" onClick={() => handleSort('confidence')} className="w-full text-left">
+                        Confidence {sortBy === 'confidence' && (sortOrder === 'asc' ? '↑' : '↓')}
+                      </button>
                     </TableHeaderCell>
                     <TableHeaderCell>Description</TableHeaderCell>
-                    <TableHeaderCell 
-                      onClick={() => handleSort('createdAt')}
-                      className="cursor-pointer hover:text-ascii-amber"
-                    >
-                      Time {sortBy === 'createdAt' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    <TableHeaderCell className="cursor-pointer hover:text-ascii-amber">
+                      <button type="button" onClick={() => handleSort('createdAt')} className="w-full text-left">
+                        Time {sortBy === 'createdAt' && (sortOrder === 'asc' ? '↑' : '↓')}
+                      </button>
                     </TableHeaderCell>
                   </TableRow>
                 </TableHeader>

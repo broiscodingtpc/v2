@@ -43,6 +43,10 @@ export const authApi = {
   
   getProfile: () => api.get('/auth/me'),
   
+  // Registration endpoint (frontend expects this method)
+  register: (data: { name: string; email: string; password: string }) =>
+    api.post('/auth/register', data),
+
   logout: () => api.post('/auth/logout'),
 };
 
@@ -58,6 +62,8 @@ export const tokensApi = {
 
 export const watchlistApi = {
   getUserWatchlist: () => api.get('/watchlist'),
+  // Alias used by WatchlistPage
+  getWatchlist: () => api.get('/watchlist'),
   
   addToWatchlist: (data: any) => api.post('/watchlist', data),
   
@@ -67,6 +73,8 @@ export const watchlistApi = {
 };
 
 export const signalsApi = {
+  // Paginated signal events list used by SignalsPage
+  getSignals: (params: any) => api.get('/signals/events', { params }),
   getSignalEvents: (params: any) => api.get('/signals/events', { params }),
   
   getTokenSignalScores: (tokenAddress: string, limit?: number) =>
@@ -84,6 +92,8 @@ export const reportsApi = {
   getLatestReports: (limit?: number) => api.get('/reports/latest', { params: { limit } }),
   
   getReportById: (id: string) => api.get(`/reports/${id}`),
+  // Alias used by ReportDetailPage
+  getReport: (id: string) => api.get(`/reports/${id}`),
   
   getReportsByTag: (tag: string, params: any) => api.get(`/reports/by-tag/${tag}`, { params }),
   
@@ -92,4 +102,24 @@ export const reportsApi = {
 
 export const botApi = {
   createAuthLink: (telegramUserId: string) => api.get(`/bot/auth-link/${telegramUserId}`),
+};
+
+// User profile and preferences API used by Profile page
+export const userApi = {
+  // Reuse auth/me for current user profile
+  getProfile: () => api.get('/auth/me'),
+
+  // Profile updates (backend implementation may vary)
+  updateProfile: (data: { name?: string; telegramUsername?: string }) =>
+    api.patch('/users/me', data),
+
+  // Change password (backend implementation may vary)
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.post('/auth/change-password', data),
+
+  // Preferences updates
+  updatePreferences: (prefs: any) => api.patch('/users/me/preferences', prefs),
+
+  // Generate Telegram link for account linking
+  generateTelegramLink: () => api.get('/bot/auth-link/me'),
 };

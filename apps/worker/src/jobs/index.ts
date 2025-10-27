@@ -33,11 +33,11 @@ const queueConfig = {
 };
 
 // Create job queues
-export const tokenDataQueue = new Bull('token-data', queueConfig);
-export const socialDataQueue = new Bull('social-data', queueConfig);
-export const aiAnalysisQueue = new Bull('ai-analysis', queueConfig);
-export const signalGenerationQueue = new Bull('signal-generation', queueConfig);
-export const cleanupQueue = new Bull('cleanup', queueConfig);
+export const tokenDataQueue = new Bull('token-data', queueConfig as any);
+export const socialDataQueue = new Bull('social-data', queueConfig as any);
+export const aiAnalysisQueue = new Bull('ai-analysis', queueConfig as any);
+export const signalGenerationQueue = new Bull('signal-generation', queueConfig as any);
+export const cleanupQueue = new Bull('cleanup', queueConfig as any);
 
 // Job processors
 import { processTokenData } from './processors/tokenData';
@@ -73,6 +73,9 @@ export function initializeJobProcessors() {
   log.info('Job processors initialized');
 }
 
+// Alias for backward compatibility
+export const initializeQueues = initializeJobProcessors;
+
 /**
  * Set up event listeners for job queues
  */
@@ -83,13 +86,18 @@ function setupEventListeners() {
     const queueName = queue.name;
     
     queue.on('completed', (job, result) => {
-      log.jobComplete(job.id, queueName, job.processedOn ? Date.now() - job.processedOn : 0, {
+      log.info(`Job ${job.id} (${queueName}) completed in ${job.processedOn ? Date.now() - job.processedOn : 0}ms`, {
+        jobId: job.id,
+        queueName,
+        duration: job.processedOn ? Date.now() - job.processedOn : 0,
         result: typeof result === 'object' ? JSON.stringify(result).substring(0, 100) : result
       });
     });
     
     queue.on('failed', (job, err) => {
-      log.jobFailed(job.id, queueName, err, {
+      log.error(`Job ${job.id} (${queueName}) failed`, err, {
+        jobId: job.id,
+        queueName,
         attempts: job.attemptsMade,
         data: JSON.stringify(job.data).substring(0, 200)
       });
@@ -128,10 +136,12 @@ export async function addTokenDataJob(
     jobId: `token-data-${jobData.batchId}`
   });
 
-  log.jobStart(job.id, 'token-data', { 
-    tokenCount: tokenAddresses.length, 
+  log.info(`Job started: token-data`, {
+    jobId: job.id,
+    jobType: 'token-data',
+    tokenCount: tokenAddresses.length,
     network,
-    batchId: jobData.batchId 
+    batchId: jobData.batchId
   });
 
   return job;
@@ -160,10 +170,12 @@ export async function addSocialDataJob(
     jobId: `social-data-${jobData.batchId}`
   });
 
-  log.jobStart(job.id, 'social-data', { 
-    tokenCount: tokens.length, 
+  log.info(`Job started: social-data`, {
+    jobId: job.id,
+    jobType: 'social-data',
+    tokenCount: tokens.length,
     platform,
-    batchId: jobData.batchId 
+    batchId: jobData.batchId
   });
 
   return job;
@@ -188,10 +200,15 @@ export async function addAIAnalysisJob(
   const job = await aiAnalysisQueue.add('generate-analysis', jobData, {
     priority,
     delay,
-    jobId: `ai-analysis-${tokenId}-${analysisType}-${Date.now()}`
+    jobId: `ai-analysis-${tokenId}-${analysisType}`
   });
 
-  log.jobStart(job.id, 'ai-analysis', { tokenId, analysisType });
+  log.info(`Job started: ai-analysis`, {
+    jobId: job.id,
+    jobType: 'ai-analysis',
+    tokenId,
+    analysisType
+  });
 
   return job;
 }
@@ -220,7 +237,11 @@ export async function addSignalGenerationJob(
     jobId: `signal-${tokenId}-${Date.now()}`
   });
 
-  log.jobStart(job.id, 'signal-generation', { tokenId });
+  log.info(`Job started: signal-generation`, {
+    jobId: job.id,
+    jobType: 'signal-generation',
+    tokenId
+  });
 
   return job;
 }
@@ -244,7 +265,12 @@ export async function addCleanupJob(
     jobId: `cleanup-${type}-${Date.now()}`
   });
 
-  log.jobStart(job.id, 'cleanup', { type, olderThanDays });
+  log.info(`Job started: cleanup`, {
+    jobId: job.id,
+    jobType: 'cleanup',
+    type,
+    olderThanDays
+  });
 
   return job;
 }
@@ -437,3 +463,6 @@ export async function shutdownQueues() {
   
   log.info('Job queues shut down');
 }
+
+// Alias for backward compatibility
+export const gracefulShutdown = shutdownQueues;

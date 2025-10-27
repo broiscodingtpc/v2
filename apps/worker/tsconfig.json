@@ -40,7 +40,8 @@
       "@/services/*": ["src/services/*"],
       "@/utils/*": ["src/utils/*"],
       "@/types/*": ["src/types/*"],
-      "@/health/*": ["src/health/*"]
+      "@/health/*": ["src/health/*"],
+      "@metapulse/db": ["../db/src"]
     },
     "typeRoots": ["./node_modules/@types", "./src/types"],
     "types": ["node", "jest"]

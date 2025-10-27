@@ -1,18 +1,25 @@
 import Bull from 'bull';
-import { PrismaClient } from '@prisma/client';
 import { aiService } from '@/services/ai';
 import { createLogger } from '@/utils/logger';
 import { SignalGenerationJob, Signal, SignalType, RiskLevel } from '@/types';
+import db from '@/database';
 
 const log = createLogger('signal-processor');
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
 
 /**
  * Process signal generation job
  */
 export async function processSignalGeneration(job: Bull.Job<SignalGenerationJob>): Promise<any> {
-  const { tokenAddresses, signalTypes, batchId } = job.data;
-  
+  const data: any = job.data || {};
+  const tokenAddresses: string[] = Array.isArray(data.tokenAddresses) && data.tokenAddresses.length
+    ? data.tokenAddresses
+    : (data.tokenId && data.tokenId !== 'batch' ? [data.tokenId] : []);
+  const signalTypes: SignalType[] = Array.isArray(data.signalTypes) && data.signalTypes.length
+    ? data.signalTypes
+    : ['technical', 'momentum', 'volume', 'social', 'ai'];
+  const batchId: string = data.batchId || `batch-${Date.now()}`;
+
   log.info(`Processing signal generation job: ${batchId}`, {
     tokenCount: tokenAddresses.length,
     signalTypes
@@ -97,21 +104,21 @@ export async function processSignalGeneration(job: Bull.Job<SignalGenerationJob>
 async function getSignalGenerationData(tokenAddress: string): Promise<any> {
   try {
     // Get token basic info
-    const token = await prisma.token.findUnique({
+    const token = await db.token.findUnique({
       where: { address: tokenAddress }
     });
 
     if (!token) return null;
 
     // Get recent price metrics (last 100 data points for better analysis)
-    const priceMetrics = await prisma.tokenMetrics.findMany({
+    const priceMetrics = await db.tokenMetrics.findMany({
       where: { tokenAddress },
       orderBy: { timestamp: 'desc' },
       take: 100
     });
 
     // Get recent social metrics
-    const socialMetrics = await prisma.socialMetrics.findMany({
+    const socialMetrics = await db.socialMetrics.findMany({
       where: {
         tokenAddress,
         timestamp: {
@@ -122,7 +129,7 @@ async function getSignalGenerationData(tokenAddress: string): Promise<any> {
     });
 
     // Get recent AI analyses
-    const technicalAnalysis = await prisma.technicalAnalysis.findFirst({
+    const technicalAnalysis = await db.technicalAnalysis.findFirst({
       where: {
         tokenAddress,
         timestamp: {
@@ -132,7 +139,7 @@ async function getSignalGenerationData(tokenAddress: string): Promise<any> {
       orderBy: { timestamp: 'desc' }
     });
 
-    const sentimentAnalysis = await prisma.sentimentAnalysis.findFirst({
+    const sentimentAnalysis = await db.sentimentAnalysis.findFirst({
       where: {
         tokenAddress,
         timestamp: {
@@ -143,7 +150,7 @@ async function getSignalGenerationData(tokenAddress: string): Promise<any> {
     });
 
     // Get existing signals to avoid duplicates
-    const existingSignals = await prisma.signal.findMany({
+    const existingSignals = await db.signal.findMany({
       where: {
         tokenAddress,
         createdAt: {
@@ -228,7 +235,7 @@ async function generateTechnicalSignals(tokenAddress: string, data: any): Promis
     return signals;
   }
 
-  const { technicalAnalysis, priceMetrics, token } = data;
+  const { technicalAnalysis, token } = data;
   const currentPrice = token.price;
 
   // Support/Resistance breakout signals
@@ -245,7 +252,6 @@ async function generateTechnicalSignals(tokenAddress: string, data: any): Promis
       stopLoss: technicalAnalysis.support || currentPrice * 0.95,
       timeframe: '4h',
       riskLevel: 'medium' as RiskLevel,
-      description: `Resistance breakout at $${technicalAnalysis.resistance.toFixed(6)}`,
       reasoning: `Price broke above resistance level with ${(technicalAnalysis.confidence * 100).toFixed(1)}% confidence`,
       metadata: {
         indicator: 'resistance_breakout',
@@ -271,8 +277,7 @@ async function generateTechnicalSignals(tokenAddress: string, data: any): Promis
       stopLoss: technicalAnalysis.support * 0.98,
       timeframe: '2h',
       riskLevel: 'low' as RiskLevel,
-      description: `Support level bounce at $${technicalAnalysis.support.toFixed(6)}`,
-      reasoning: `Price approaching support with potential for bounce`,
+      reasoning: `Support level bounce at $${technicalAnalysis.support.toFixed(6)}`,
       metadata: {
         indicator: 'support_bounce',
         supportLevel: technicalAnalysis.support,
@@ -297,8 +302,7 @@ async function generateTechnicalSignals(tokenAddress: string, data: any): Promis
       stopLoss: currentPrice * 0.95,
       timeframe: '6h',
       riskLevel: 'medium' as RiskLevel,
-      description: 'Potential trend reversal from bearish to bullish',
-      reasoning: `Weak bearish trend (${technicalAnalysis.strength.toFixed(2)}) may be reversing`,
+      reasoning: 'Potential trend reversal from bearish to bullish',
       metadata: {
         indicator: 'trend_reversal',
         previousTrend: technicalAnalysis.trend,
@@ -326,8 +330,7 @@ async function generateMomentumSignals(tokenAddress: string, data: any): Promise
   const currentPrice = token.price;
   
   // Calculate momentum indicators
-  const prices = priceMetrics.map(m => m.price).reverse(); // Oldest first
-  const volumes = priceMetrics.map(m => m.volume24h).reverse();
+  const prices = priceMetrics.map((m: any) => m.price).reverse(); // Oldest first
   
   // Price momentum (10-period)
   if (prices.length >= 10) {
@@ -344,12 +347,11 @@ async function generateMomentumSignals(tokenAddress: string, data: any): Promise
         confidence: 0.7,
         price: currentPrice,
         targetPrice: currentPrice * 1.1,
-        stopLoss: currentPrice * 0.92,
-        timeframe: '2h',
-        riskLevel: 'medium' as RiskLevel,
-        description: `Strong bullish momentum: ${momentum.toFixed(1)}%`,
-        reasoning: `Price gained ${momentum.toFixed(1)}% over last 10 periods`,
-        metadata: {
+      stopLoss: currentPrice * 0.92,
+      timeframe: '2h',
+      riskLevel: 'medium' as RiskLevel,
+      reasoning: `Price gained ${momentum.toFixed(1)}% over last 10 periods`,
+      metadata: {
           indicator: 'momentum',
           momentumValue: momentum,
           period: 10
@@ -373,7 +375,6 @@ async function generateMomentumSignals(tokenAddress: string, data: any): Promise
         stopLoss: currentPrice * 0.95,
         timeframe: '4h',
         riskLevel: 'high' as RiskLevel,
-        description: `Oversold condition: ${momentum.toFixed(1)}%`,
         reasoning: `Potential reversal after ${Math.abs(momentum).toFixed(1)}% decline`,
         metadata: {
           indicator: 'oversold_momentum',
@@ -404,8 +405,8 @@ async function generateVolumeSignals(tokenAddress: string, data: any): Promise<S
   const currentVolume = token.volume24h;
   
   // Calculate average volume
-  const volumes = priceMetrics.map(m => m.volume24h);
-  const avgVolume = volumes.reduce((sum, vol) => sum + vol, 0) / volumes.length;
+  const volumes = priceMetrics.map((m: any) => m.volume24h);
+  const avgVolume = volumes.reduce((sum: number, vol: number) => sum + vol, 0) / volumes.length;
   
   if (avgVolume === 0) return signals;
   
@@ -425,7 +426,6 @@ async function generateVolumeSignals(tokenAddress: string, data: any): Promise<S
       stopLoss: currentPrice * 0.95,
       timeframe: '1h',
       riskLevel: 'medium' as RiskLevel,
-      description: `Volume spike: ${volumeRatio.toFixed(1)}x average`,
       reasoning: `${volumeRatio.toFixed(1)}x volume increase with ${token.priceChange24h.toFixed(1)}% price gain`,
       metadata: {
         indicator: 'volume_spike',
@@ -453,7 +453,6 @@ async function generateVolumeSignals(tokenAddress: string, data: any): Promise<S
       stopLoss: null,
       timeframe: '2h',
       riskLevel: 'low' as RiskLevel,
-      description: `Volume divergence: High volume, low price movement`,
       reasoning: `${volumeRatio.toFixed(1)}x volume with only ${Math.abs(token.priceChange24h).toFixed(1)}% price change`,
       metadata: {
         indicator: 'volume_divergence',
@@ -478,14 +477,14 @@ async function generateSocialSignals(tokenAddress: string, data: any): Promise<S
     return signals;
   }
 
-  const { socialMetrics, sentimentAnalysis, token } = data;
+  const { socialMetrics, token } = data;
   const currentPrice = token.price;
   
   // Calculate recent social metrics
   const recentMetrics = socialMetrics.slice(0, 5); // Last 5 data points
-  const avgSentiment = recentMetrics.reduce((sum, m) => sum + m.sentiment, 0) / recentMetrics.length;
-  const totalMentions = recentMetrics.reduce((sum, m) => sum + m.mentions, 0);
-  const totalEngagement = recentMetrics.reduce((sum, m) => sum + m.engagement, 0);
+  const avgSentiment = recentMetrics.reduce((sum: number, m: any) => sum + m.sentiment, 0) / recentMetrics.length;
+    const totalMentions = recentMetrics.reduce((sum: number, m: any) => sum + m.mentions, 0);
+  const totalEngagement = recentMetrics.reduce((sum: number, m: any) => sum + m.engagement, 0);
 
   // Positive sentiment surge
   if (avgSentiment > 0.6 && totalMentions > 20) {
@@ -501,7 +500,6 @@ async function generateSocialSignals(tokenAddress: string, data: any): Promise<S
       stopLoss: currentPrice * 0.96,
       timeframe: '3h',
       riskLevel: 'medium' as RiskLevel,
-      description: `Positive social sentiment: ${(avgSentiment * 100).toFixed(0)}%`,
       reasoning: `${totalMentions} mentions with ${(avgSentiment * 100).toFixed(0)}% positive sentiment`,
       metadata: {
         indicator: 'social_sentiment',
@@ -516,8 +514,8 @@ async function generateSocialSignals(tokenAddress: string, data: any): Promise<S
 
   // Social momentum (increasing mentions)
   if (recentMetrics.length >= 3) {
-    const oldMentions = recentMetrics.slice(-2).reduce((sum, m) => sum + m.mentions, 0);
-    const newMentions = recentMetrics.slice(0, 2).reduce((sum, m) => sum + m.mentions, 0);
+    const oldMentions = recentMetrics.slice(-2).reduce((sum: number, m: any) => sum + m.mentions, 0);
+    const newMentions = recentMetrics.slice(0, 2).reduce((sum: number, m: any) => sum + m.mentions, 0);
     
     if (newMentions > oldMentions * 1.5 && newMentions > 10) {
       signals.push({
@@ -532,8 +530,7 @@ async function generateSocialSignals(tokenAddress: string, data: any): Promise<S
         stopLoss: null,
         timeframe: '2h',
         riskLevel: 'low' as RiskLevel,
-        description: `Social momentum: ${((newMentions / oldMentions - 1) * 100).toFixed(0)}% increase`,
-        reasoning: `Mentions increased from ${oldMentions} to ${newMentions}`,
+        reasoning: `Social momentum: ${((newMentions / oldMentions - 1) * 100).toFixed(0)}% increase`,
         metadata: {
           indicator: 'social_momentum',
           oldMentions,
@@ -557,38 +554,37 @@ async function generateAISignals(tokenAddress: string, data: any): Promise<Signa
   
   try {
     // Use AI service to generate trading signals
-    const aiSignals = await aiService.generateTradingSignals(data);
+    const aiSignal = await aiService.generateTradingSignal(
+      tokenAddress,
+      data.analyses || [],
+      data.token,
+      data.socialMetrics || []
+    );
     
-    if (!aiSignals || aiSignals.length === 0) {
+    if (!aiSignal) {
       return signals;
     }
 
     const currentPrice = data.token.price;
 
-    for (const aiSignal of aiSignals) {
-      signals.push({
-        id: `${tokenAddress}-ai-${aiSignal.type}-${Date.now()}`,
-        tokenAddress,
-        type: 'ai',
-        action: aiSignal.action,
-        strength: aiSignal.strength,
-        confidence: aiSignal.confidence,
-        price: currentPrice,
-        targetPrice: aiSignal.targetPrice,
-        stopLoss: aiSignal.stopLoss,
-        timeframe: aiSignal.timeframe || '4h',
-        riskLevel: aiSignal.riskLevel || 'medium',
-        description: aiSignal.description,
-        reasoning: aiSignal.reasoning,
-        metadata: {
-          indicator: 'ai_analysis',
-          model: aiSignal.model || 'unknown',
-          factors: aiSignal.factors || []
-        },
-        createdAt: new Date(),
-        expiresAt: new Date(Date.now() + (aiSignal.duration || 4) * 60 * 60 * 1000)
-      });
-    }
+    signals.push({
+      id: `${tokenAddress}-ai-${aiSignal.type}-${Date.now()}`,
+      tokenAddress,
+      type: 'ai',
+      action: aiSignal.type,
+      strength: aiSignal.strength,
+      confidence: aiSignal.confidence,
+      price: currentPrice,
+      targetPrice: aiSignal.targetPrice ?? null,
+      stopLoss: aiSignal.stopLoss ?? null,
+      timeframe: aiSignal.timeframe || '4h',
+      reasoning: aiSignal.reasoning,
+      metadata: {
+        indicator: 'ai_analysis'
+      },
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000)
+    });
 
   } catch (error) {
     log.error(`Failed to generate AI signals for ${tokenAddress}`, error);
@@ -603,18 +599,18 @@ async function generateAISignals(tokenAddress: string, data: any): Promise<Signa
 function filterAndRankSignals(signals: Signal[], existingSignals: any[]): Signal[] {
   // Remove signals that are too similar to existing ones
   const filteredSignals = signals.filter(signal => {
-    return !existingSignals.some(existing => 
+    return !existingSignals.some((existing: any) =>
       existing.type === signal.type &&
       existing.action === signal.action &&
-      Math.abs(existing.price - signal.price) / signal.price < 0.02 && // Within 2% price
-      (Date.now() - new Date(existing.createdAt).getTime()) < 2 * 60 * 60 * 1000 // Within 2 hours
+      Math.abs(existing.price - signal.price) / signal.price < 0.02 &&
+      (Date.now() - new Date(existing.createdAt).getTime()) < 2 * 60 * 60 * 1000
     );
   });
 
   // Sort by strength and confidence
   return filteredSignals
     .sort((a, b) => (b.strength * b.confidence) - (a.strength * a.confidence))
-    .slice(0, 5); // Limit to top 5 signals per token
+    .slice(0, 5);
 }
 
 /**
@@ -625,25 +621,24 @@ async function storeGeneratedSignals(signals: Signal[], batchId: string): Promis
     log.info(`Storing ${signals.length} signals for batch: ${batchId}`);
 
     for (const signal of signals) {
-      await prisma.signal.create({
+      await db.signal.create({
         data: {
-          id: signal.id,
           tokenAddress: signal.tokenAddress,
           type: signal.type,
           action: signal.action,
           strength: signal.strength,
           confidence: signal.confidence,
           price: signal.price,
-          targetPrice: signal.targetPrice,
-          stopLoss: signal.stopLoss,
+          targetPrice: signal.targetPrice ?? null,
+          stopLoss: signal.stopLoss ?? null,
           timeframe: signal.timeframe,
-          riskLevel: signal.riskLevel,
-          description: signal.description,
-          reasoning: signal.reasoning,
-          metadata: signal.metadata,
+          riskLevel: (signal.riskLevel as string) || 'medium',
+          description: signal.reasoning || 'Generated trading signal',
+          reasoning: signal.reasoning || '',
+          metadata: signal.metadata || {},
           status: 'active',
           createdAt: signal.createdAt,
-          expiresAt: signal.expiresAt
+          expiresAt: signal.expiresAt ?? null
         }
       });
     }
@@ -663,11 +658,11 @@ export async function getTokensNeedingSignals(): Promise<string[]> {
   try {
     const cutoffTime = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
     
-    // Get tokens with recent activity but no recent signals
-    const activeTokens = await prisma.tokenMetrics.findMany({
+    // Get tokens with recent market updates but no recent signals
+    const activeTokens = await db.tokenMetrics.findMany({
       where: {
         timestamp: {
-          gte: new Date(Date.now() - 15 * 60 * 1000) // Last 15 minutes
+          gte: new Date(Date.now() - 15 * 60 * 1000)
         }
       },
       select: { tokenAddress: true },
@@ -675,15 +670,14 @@ export async function getTokensNeedingSignals(): Promise<string[]> {
       take: 30
     });
 
-    const tokensNeedingSignals = [];
+    const tokensNeedingSignals: string[] = [];
 
     for (const { tokenAddress } of activeTokens) {
       // Check if token has recent signals
-      const recentSignals = await prisma.signal.findFirst({
+      const recentSignals = await db.signal.findFirst({
         where: {
           tokenAddress,
-          createdAt: { gte: cutoffTime },
-          status: 'active'
+          createdAt: { gte: cutoffTime }
         }
       });
 

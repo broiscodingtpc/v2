@@ -4,7 +4,11 @@ import { prisma } from '@metapulse/db';
 @Injectable()
 export class ReportsService {
   async getReports(tokenAddress?: string, limit = 20, offset = 0) {
-    const where = tokenAddress ? { tokenAddress } : {};
+    const token = tokenAddress
+      ? await prisma.token.findUnique({ where: { mint: tokenAddress } })
+      : null;
+
+    const where = token ? { tokenId: token.id } : {};
 
     const [reports, total] = await Promise.all([
       prisma.analystReport.findMany({
@@ -14,12 +18,11 @@ export class ReportsService {
         orderBy: { createdAt: 'desc' },
         include: {
           token: {
-            select: {
-              symbol: true,
-              name: true,
-              logoUrl: true,
-              price: true,
-              priceChange24h: true,
+            include: {
+              pairs: {
+                take: 1,
+                orderBy: { vol24h: 'desc' },
+              },
             },
           },
         },
@@ -28,18 +31,34 @@ export class ReportsService {
     ]);
 
     return {
-      reports: reports.map(report => ({
-        id: report.id,
-        tokenAddress: report.tokenAddress,
-        title: report.title,
-        summary: report.summary,
-        content: report.content,
-        sentiment: report.sentiment,
-        confidenceScore: report.confidenceScore,
-        tags: report.tags,
-        createdAt: report.createdAt.toISOString(),
-        token: report.token,
-      })),
+      reports: reports.map((report) => {
+        const topPair = report.token.pairs[0];
+        return {
+          id: report.id,
+          tokenAddress: report.token.mint,
+          summaryShort: report.summaryShort,
+          summaryLong: report.summaryLong,
+          riskSummary: report.riskSummary,
+          model: report.model,
+          createdAt: report.createdAt.toISOString(),
+          token: {
+            address: report.token.mint,
+            symbol: report.token.symbol ?? '',
+            name: report.token.name ?? '',
+            price: topPair ? Number(topPair.price) : 0,
+            marketCap: null,
+            volume24h: topPair ? Number(topPair.vol24h) : 0,
+            priceChange24h: null,
+            logoUrl: null,
+            pairs: report.token.pairs.map((pair) => ({
+              address: pair.id,
+              dex: pair.dexId,
+              volume24h: Number(pair.vol24h),
+              liquidity: Number(pair.liqUsd),
+            })),
+          },
+        };
+      }),
       pagination: {
         total,
         limit,
@@ -57,11 +76,7 @@ export class ReportsService {
           include: {
             pairs: {
               take: 1,
-              orderBy: { volume24h: 'desc' },
-            },
-            signalScores: {
-              orderBy: { createdAt: 'desc' },
-              take: 1,
+              orderBy: { vol24h: 'desc' },
             },
           },
         },
@@ -72,36 +87,31 @@ export class ReportsService {
       return null;
     }
 
+    const topPair = report.token.pairs[0];
     return {
       id: report.id,
-      tokenAddress: report.tokenAddress,
-      title: report.title,
-      summary: report.summary,
-      content: report.content,
-      sentiment: report.sentiment,
-      confidenceScore: report.confidenceScore,
-      tags: report.tags,
+      tokenAddress: report.token.mint,
+      summaryShort: report.summaryShort,
+      summaryLong: report.summaryLong,
+      riskSummary: report.riskSummary,
+      model: report.model,
       createdAt: report.createdAt.toISOString(),
       token: {
-        address: report.token.address,
-        symbol: report.token.symbol,
-        name: report.token.name,
-        price: report.token.price,
-        marketCap: report.token.marketCap,
-        volume24h: report.token.volume24h,
-        priceChange24h: report.token.priceChange24h,
-        logoUrl: report.token.logoUrl,
-        pairs: report.token.pairs.map(pair => ({
-          address: pair.address,
-          dex: pair.dex,
-          volume24h: pair.volume24h,
-          liquidity: pair.liquidity,
+        address: report.token.mint,
+        symbol: report.token.symbol ?? '',
+        name: report.token.name ?? '',
+        price: topPair ? Number(topPair.price) : 0,
+        marketCap: null,
+        volume24h: topPair ? Number(topPair.vol24h) : 0,
+        priceChange24h: null,
+        logoUrl: null,
+        pairs: report.token.pairs.map((pair) => ({
+          address: pair.id,
+          dex: pair.dexId,
+          volume24h: Number(pair.vol24h),
+          liquidity: Number(pair.liqUsd),
         })),
-        latestScore: report.token.signalScores[0] ? {
-          socialScore: report.token.signalScores[0].socialScore,
-          technicalScore: report.token.signalScores[0].technicalScore,
-          overallScore: report.token.signalScores[0].overallScore,
-        } : null,
+        latestScore: null,
       },
     };
   }
@@ -112,74 +122,83 @@ export class ReportsService {
       orderBy: { createdAt: 'desc' },
       include: {
         token: {
-          select: {
-            symbol: true,
-            name: true,
-            logoUrl: true,
-            price: true,
-            priceChange24h: true,
+          include: {
+            pairs: {
+              take: 1,
+              orderBy: { vol24h: 'desc' },
+            },
           },
         },
       },
     });
 
-    return reports.map(report => ({
-      id: report.id,
-      tokenAddress: report.tokenAddress,
-      title: report.title,
-      summary: report.summary,
-      sentiment: report.sentiment,
-      confidenceScore: report.confidenceScore,
-      tags: report.tags,
-      createdAt: report.createdAt.toISOString(),
-      token: report.token,
-    }));
+    return reports.map((report) => {
+      const topPair = report.token.pairs[0];
+      return {
+        id: report.id,
+        tokenAddress: report.token.mint,
+        summaryShort: report.summaryShort,
+        summaryLong: report.summaryLong,
+        riskSummary: report.riskSummary,
+        model: report.model,
+        createdAt: report.createdAt.toISOString(),
+        token: {
+          address: report.token.mint,
+          symbol: report.token.symbol ?? '',
+          name: report.token.name ?? '',
+          price: topPair ? Number(topPair.price) : 0,
+          marketCap: null,
+          volume24h: topPair ? Number(topPair.vol24h) : 0,
+          priceChange24h: null,
+          logoUrl: null,
+        },
+      };
+    });
   }
 
   async getReportsByTag(tag: string, limit = 20, offset = 0) {
     const [reports, total] = await Promise.all([
       prisma.analystReport.findMany({
-        where: {
-          tags: {
-            has: tag,
-          },
-        },
         take: limit,
         skip: offset,
         orderBy: { createdAt: 'desc' },
         include: {
           token: {
-            select: {
-              symbol: true,
-              name: true,
-              logoUrl: true,
-              price: true,
-              priceChange24h: true,
+            include: {
+              pairs: {
+                take: 1,
+                orderBy: { vol24h: 'desc' },
+              },
             },
           },
         },
       }),
-      prisma.analystReport.count({
-        where: {
-          tags: {
-            has: tag,
-          },
-        },
-      }),
+      prisma.analystReport.count({}),
     ]);
 
     return {
-      reports: reports.map(report => ({
-        id: report.id,
-        tokenAddress: report.tokenAddress,
-        title: report.title,
-        summary: report.summary,
-        sentiment: report.sentiment,
-        confidenceScore: report.confidenceScore,
-        tags: report.tags,
-        createdAt: report.createdAt.toISOString(),
-        token: report.token,
-      })),
+      reports: reports.map((report) => {
+        const topPair = report.token.pairs[0];
+        return {
+          id: report.id,
+          tokenAddress: report.token.mint,
+          summaryShort: report.summaryShort,
+          summaryLong: report.summaryLong,
+          riskSummary: report.riskSummary,
+          model: report.model,
+          createdAt: report.createdAt.toISOString(),
+          token: {
+            address: report.token.mint,
+            symbol: report.token.symbol ?? '',
+            name: report.token.name ?? '',
+            price: topPair ? Number(topPair.price) : 0,
+            marketCap: null,
+            volume24h: topPair ? Number(topPair.vol24h) : 0,
+            priceChange24h: null,
+            logoUrl: null,
+          },
+        };
+      }),
       pagination: {
         total,
         limit,
@@ -190,20 +209,7 @@ export class ReportsService {
   }
 
   async getReportTags() {
-    // Get all unique tags from reports
-    const reports = await prisma.analystReport.findMany({
-      select: { tags: true },
-    });
-
-    const allTags = reports.flatMap(report => report.tags);
-    const uniqueTags = [...new Set(allTags)];
-
-    // Count occurrences of each tag
-    const tagCounts = uniqueTags.map(tag => ({
-      tag,
-      count: allTags.filter(t => t === tag).length,
-    }));
-
-    return tagCounts.sort((a, b) => b.count - a.count);
+    // Tags are not part of the current schema; return empty list
+    return [] as { tag: string; count: number }[];
   }
 }

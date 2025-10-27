@@ -1,21 +1,20 @@
 import Bull from 'bull';
-import { PrismaClient } from '@prisma/client';
 import { aiService } from '@/services/ai';
 import { createLogger } from '@/utils/logger';
-import { AIAnalysisJob, AIAnalysis, TechnicalAnalysis, SentimentAnalysis } from '@/types';
+import { AIAnalysisJob, AIAnalysisRecord, TechnicalAnalysis, SentimentAnalysis } from '@/types';
+import db from '@/database';
 
 const log = createLogger('ai-processor');
-const prisma = new PrismaClient();
 
 /**
  * Process AI analysis job
  */
 export async function processAIAnalysis(job: Bull.Job<AIAnalysisJob>): Promise<any> {
-  const { tokenAddresses, analysisTypes, batchId } = job.data;
-  
-  log.info(`Processing AI analysis job: ${batchId}`, {
-    tokenCount: tokenAddresses.length,
-    analysisTypes
+  const { tokenId, analysisType } = job.data;
+  const tokenAddress = tokenId;
+
+  log.info(`Processing AI analysis job for token: ${tokenAddress}`, {
+    analysisType
   });
 
   try {
@@ -24,67 +23,53 @@ export async function processAIAnalysis(job: Bull.Job<AIAnalysisJob>): Promise<a
       failed: 0,
       technicalAnalyses: [] as TechnicalAnalysis[],
       sentimentAnalyses: [] as SentimentAnalysis[],
-      aiAnalyses: [] as AIAnalysis[]
+      aiAnalyses: [] as AIAnalysisRecord[]
     };
 
-    const totalTokens = tokenAddresses.length;
+    // Update job progress: start
+    job.progress(5);
 
-    for (let i = 0; i < tokenAddresses.length; i++) {
-      const tokenAddress = tokenAddresses[i];
-      
-      // Update job progress
-      const progress = Math.floor((i / totalTokens) * 100);
-      job.progress(progress);
-      
-      try {
-        log.info(`Processing AI analysis for token: ${tokenAddress}`);
-        
-        // Get token data for analysis
-        const tokenData = await getTokenDataForAnalysis(tokenAddress);
-        
-        if (!tokenData) {
-          log.warn(`No data found for token: ${tokenAddress}`);
-          results.failed++;
-          continue;
+    // Get token data for analysis
+    const tokenData = await getTokenDataForAnalysis(tokenAddress);
+    if (!tokenData) {
+      log.warn(`No data found for token: ${tokenAddress}`);
+      results.failed++;
+    } else {
+      // Process requested analysis type
+      switch (analysisType) {
+        case 'technical': {
+          const technical = await processTechnicalAnalysis(tokenAddress, tokenData);
+          if (technical) results.technicalAnalyses.push(technical);
+          break;
         }
-
-        // Process different types of analysis
-        if (analysisTypes.includes('technical')) {
-          const technicalAnalysis = await processTechnicalAnalysis(tokenAddress, tokenData);
-          if (technicalAnalysis) {
-            results.technicalAnalyses.push(technicalAnalysis);
-          }
+        case 'sentiment':
+        case 'social': {
+          const sentiment = await processSentimentAnalysis(tokenAddress, tokenData);
+          if (sentiment) results.sentimentAnalyses.push(sentiment);
+          break;
         }
-
-        if (analysisTypes.includes('sentiment')) {
-          const sentimentAnalysis = await processSentimentAnalysis(tokenAddress, tokenData);
-          if (sentimentAnalysis) {
-            results.sentimentAnalyses.push(sentimentAnalysis);
-          }
+        case 'fundamental': {
+          const comprehensive = await processComprehensiveAnalysis(tokenAddress, tokenData);
+          if (comprehensive) results.aiAnalyses.push(comprehensive);
+          break;
         }
-
-        if (analysisTypes.includes('comprehensive')) {
-          const aiAnalysis = await processComprehensiveAnalysis(tokenAddress, tokenData);
-          if (aiAnalysis) {
-            results.aiAnalyses.push(aiAnalysis);
-          }
+        default: {
+          const technical = await processTechnicalAnalysis(tokenAddress, tokenData);
+          if (technical) results.technicalAnalyses.push(technical);
+          break;
         }
-
-        results.processed++;
-        
-        // Rate limiting delay between AI calls
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-      } catch (error) {
-        log.error(`Failed to process AI analysis for ${tokenAddress}`, error);
-        results.failed++;
       }
+
+      results.processed++;
     }
 
-    // Store AI analysis results
-    await storeAIAnalysisResults(results, batchId);
+    // Store results for this single job
+    const singleBatchId = `single-${tokenAddress}-${Date.now()}`;
+    await storeAIAnalysisResults(results, singleBatchId);
 
-    log.info(`AI analysis job completed: ${batchId}`, {
+    job.progress(100);
+
+    log.info(`AI analysis job completed for token: ${tokenAddress}`, {
       processed: results.processed,
       failed: results.failed,
       technicalAnalyses: results.technicalAnalyses.length,
@@ -93,7 +78,7 @@ export async function processAIAnalysis(job: Bull.Job<AIAnalysisJob>): Promise<a
     });
 
     return {
-      batchId,
+      tokenAddress,
       processed: results.processed,
       failed: results.failed,
       technicalAnalyses: results.technicalAnalyses.length,
@@ -102,7 +87,7 @@ export async function processAIAnalysis(job: Bull.Job<AIAnalysisJob>): Promise<a
     };
 
   } catch (error) {
-    log.error(`AI analysis job failed: ${batchId}`, error);
+    log.error(`AI analysis job failed for token: ${tokenAddress}`, error);
     throw error;
   }
 }
@@ -113,21 +98,21 @@ export async function processAIAnalysis(job: Bull.Job<AIAnalysisJob>): Promise<a
 async function getTokenDataForAnalysis(tokenAddress: string): Promise<any> {
   try {
     // Get token basic info
-    const token = await prisma.token.findUnique({
+    const token = await db.token.findUnique({
       where: { address: tokenAddress }
     });
 
     if (!token) return null;
 
     // Get recent price metrics (last 50 data points)
-    const priceMetrics = await prisma.tokenMetrics.findMany({
+    const priceMetrics = await db.tokenMetrics.findMany({
       where: { tokenAddress },
       orderBy: { timestamp: 'desc' },
       take: 50
     });
 
     // Get recent social metrics (last 24 hours)
-    const socialMetrics = await prisma.socialMetrics.findMany({
+    const socialMetrics = await db.socialMetrics.findMany({
       where: {
         tokenAddress,
         timestamp: {
@@ -138,7 +123,7 @@ async function getTokenDataForAnalysis(tokenAddress: string): Promise<any> {
     });
 
     // Get any existing signals for context
-    const recentSignals = await prisma.signal.findMany({
+    const recentSignals = await db.signal.findMany({
       where: {
         tokenAddress,
         createdAt: {
@@ -169,25 +154,39 @@ async function processTechnicalAnalysis(tokenAddress: string, tokenData: any): P
   try {
     log.info(`Generating technical analysis for: ${tokenAddress}`);
     
-    const analysis = await aiService.generateTechnicalAnalysis(tokenData);
+    // Convert TokenMetrics -> PriceData[] (approximate volume)
+    const priceData = (tokenData.priceMetrics || []).map((m: any) => ({
+      tokenAddress,
+      price: Number(m.price),
+      volume: Number(m.volume24h || 0),
+      marketCap: Number(m.marketCap || 0),
+      liquidity: Number(m.liquidity || 0),
+      timestamp: new Date(m.timestamp),
+      source: 'dexscreener' as const,
+    }));
+
+    const analysis = await aiService.generateTechnicalAnalysis(tokenAddress, priceData, '1d');
     
     if (!analysis) {
       log.warn(`No technical analysis generated for: ${tokenAddress}`);
       return null;
     }
 
-    const technicalAnalysis: TechnicalAnalysis = {
-      tokenAddress,
-      timeframe: '24h',
-      indicators: analysis.indicators || {},
-      signals: analysis.signals || [],
-      support: analysis.support || 0,
-      resistance: analysis.resistance || 0,
-      trend: analysis.trend || 'neutral',
-      strength: analysis.strength || 0,
-      recommendation: analysis.recommendation || 'hold',
-      confidence: analysis.confidence || 0,
-      analysis: analysis.summary || '',
+    const trend = analysis.sentiment > 0.2 ? 'bullish' : analysis.sentiment < -0.2 ? 'bearish' : 'neutral';
+    const recommendation = (analysis.recommendations?.[0]?.toLowerCase() as 'buy' | 'sell' | 'hold') || 'hold';
+
+  const technicalAnalysis: TechnicalAnalysis = {
+    tokenAddress,
+    timeframe: analysis.timeframe || '1d',
+    indicators: (analysis as any).technicalIndicators ?? {},
+    signals: analysis.signals || [],
+    support: null,
+    resistance: null,
+    trend,
+    strength: Math.min(1, Math.max(0, analysis.confidence)),
+      recommendation,
+      confidence: Math.min(1, Math.max(0, analysis.confidence)),
+      analysis: analysis.analysis || '',
       timestamp: new Date()
     };
 
@@ -212,24 +211,29 @@ async function processSentimentAnalysis(tokenAddress: string, tokenData: any): P
   try {
     log.info(`Generating sentiment analysis for: ${tokenAddress}`);
     
-    const analysis = await aiService.generateSentimentAnalysis(tokenData);
+  const tweets: any[] = [];
+  const analysis = await aiService.generateSentimentAnalysis(tokenAddress, tokenData.socialMetrics || [], tweets as any);
     
     if (!analysis) {
       log.warn(`No sentiment analysis generated for: ${tokenAddress}`);
       return null;
     }
 
-    const sentimentAnalysis: SentimentAnalysis = {
-      tokenAddress,
-      overall: analysis.overall || 0,
-      social: analysis.social || 0,
-      news: analysis.news || 0,
-      technical: analysis.technical || 0,
-      factors: analysis.factors || [],
-      confidence: analysis.confidence || 0,
-      summary: analysis.summary || '',
-      timestamp: new Date()
-    };
+  const socialAvg = (tokenData.socialMetrics || []).length
+    ? (tokenData.socialMetrics || []).reduce((sum: number, s: any) => sum + (s.sentiment || 0), 0) / (tokenData.socialMetrics || []).length
+    : 0;
+
+  const sentimentAnalysis: SentimentAnalysis = {
+    tokenAddress,
+    overall: analysis.sentiment || 0,
+    social: socialAvg,
+    news: 0,
+    technical: 0,
+    factors: [...(analysis.signals || []), ...(analysis.recommendations || [])],
+    confidence: analysis.confidence || 0,
+    summary: analysis.analysis || '',
+    timestamp: new Date()
+  };
 
     log.info(`Sentiment analysis generated for ${tokenAddress}`, {
       overall: sentimentAnalysis.overall,
@@ -247,7 +251,7 @@ async function processSentimentAnalysis(tokenAddress: string, tokenData: any): P
 /**
  * Process comprehensive AI analysis
  */
-async function processComprehensiveAnalysis(tokenAddress: string, tokenData: any): Promise<AIAnalysis | null> {
+async function processComprehensiveAnalysis(tokenAddress: string, tokenData: any): Promise<AIAnalysisRecord | null> {
   try {
     log.info(`Generating comprehensive AI analysis for: ${tokenAddress}`);
     
@@ -259,7 +263,7 @@ async function processComprehensiveAnalysis(tokenAddress: string, tokenData: any
       return null;
     }
 
-    const aiAnalysis: AIAnalysis = {
+    const aiAnalysis: AIAnalysisRecord = {
       tokenAddress,
       type: 'comprehensive',
       summary: analysis.summary || '',
@@ -300,7 +304,7 @@ async function storeAIAnalysisResults(
   results: {
     technicalAnalyses: TechnicalAnalysis[];
     sentimentAnalyses: SentimentAnalysis[];
-    aiAnalyses: AIAnalysis[];
+    aiAnalyses: AIAnalysisRecord[];
   },
   batchId: string
 ): Promise<void> {
@@ -313,14 +317,14 @@ async function storeAIAnalysisResults(
 
     // Store technical analyses
     for (const analysis of results.technicalAnalyses) {
-      await prisma.technicalAnalysis.create({
+      await db.technicalAnalysis.create({
         data: {
           tokenAddress: analysis.tokenAddress,
           timeframe: analysis.timeframe,
-          indicators: analysis.indicators,
-          signals: analysis.signals,
-          support: analysis.support,
-          resistance: analysis.resistance,
+          indicators: analysis.indicators ?? {},
+          signals: analysis.signals ?? [],
+          support: analysis.support ?? null,
+          resistance: analysis.resistance ?? null,
           trend: analysis.trend,
           strength: analysis.strength,
           recommendation: analysis.recommendation,
@@ -333,7 +337,7 @@ async function storeAIAnalysisResults(
 
     // Store sentiment analyses
     for (const analysis of results.sentimentAnalyses) {
-      await prisma.sentimentAnalysis.create({
+      await db.sentimentAnalysis.create({
         data: {
           tokenAddress: analysis.tokenAddress,
           overall: analysis.overall,
@@ -350,19 +354,19 @@ async function storeAIAnalysisResults(
 
     // Store comprehensive AI analyses
     for (const analysis of results.aiAnalyses) {
-      await prisma.aiAnalysis.create({
+      await db.aIAnalysis.create({
         data: {
           tokenAddress: analysis.tokenAddress,
           type: analysis.type,
           summary: analysis.summary,
           keyPoints: analysis.keyPoints,
-          riskLevel: analysis.riskLevel,
+          riskLevel: analysis.riskLevel || 'medium',
           timeHorizon: analysis.timeHorizon,
           confidence: analysis.confidence,
           recommendation: analysis.recommendation,
-          targetPrice: analysis.targetPrice,
-          stopLoss: analysis.stopLoss,
-          metadata: analysis.metadata,
+          targetPrice: analysis.targetPrice ?? null,
+          stopLoss: analysis.stopLoss ?? null,
+          metadata: analysis.metadata ?? {},
           timestamp: analysis.timestamp
         }
       });
@@ -384,7 +388,7 @@ export async function getTokensNeedingAIAnalysis(): Promise<string[]> {
     const cutoffTime = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
     
     // Get tokens with recent price activity but no recent AI analysis
-    const activeTokens = await prisma.tokenMetrics.findMany({
+    const activeTokens = await db.tokenMetrics.findMany({
       where: {
         timestamp: {
           gte: new Date(Date.now() - 30 * 60 * 1000) // Last 30 minutes
@@ -399,7 +403,7 @@ export async function getTokensNeedingAIAnalysis(): Promise<string[]> {
 
     for (const { tokenAddress } of activeTokens) {
       // Check if token has recent AI analysis
-      const recentAnalysis = await prisma.aiAnalysis.findFirst({
+      const recentAnalysis = await db.aIAnalysis.findFirst({
         where: {
           tokenAddress,
           timestamp: { gte: cutoffTime }
@@ -427,7 +431,7 @@ export async function generateMarketOverview(): Promise<any> {
     log.info('Generating market overview analysis');
 
     // Get top tokens by market cap
-    const topTokens = await prisma.token.findMany({
+    const topTokens = await db.token.findMany({
       where: {
         marketCap: { gt: 0 }
       },
@@ -436,7 +440,7 @@ export async function generateMarketOverview(): Promise<any> {
     });
 
     // Get recent market metrics
-    const recentMetrics = await prisma.tokenMetrics.findMany({
+    const recentMetrics = await db.tokenMetrics.findMany({
       where: {
         timestamp: {
           gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
@@ -468,7 +472,7 @@ export async function generateMarketOverview(): Promise<any> {
     };
 
     // Store market overview
-    await prisma.marketOverview.create({
+    await db.marketOverview.create({
       data: {
         statistics: marketStats,
         analysis: aiAnalysis?.summary || '',
@@ -526,7 +530,7 @@ function calculateMarketStatistics(tokens: any[], metrics: any[]): Record<string
 /**
  * Get top performing tokens
  */
-function getTopPerformers(tokens: any[], metrics: any[]): any[] {
+function getTopPerformers(tokens: any[], _metrics: any[]): any[] {
   return tokens
     .filter(token => token.priceChange24h !== null)
     .sort((a, b) => (b.priceChange24h || 0) - (a.priceChange24h || 0))
@@ -546,7 +550,7 @@ function getTopPerformers(tokens: any[], metrics: any[]): any[] {
  */
 async function calculateOverallMarketSentiment(): Promise<number> {
   try {
-    const recentSentiment = await prisma.sentimentAnalysis.findMany({
+    const recentSentiment = await db.sentimentAnalysis.findMany({
       where: {
         timestamp: {
           gte: new Date(Date.now() - 24 * 60 * 60 * 1000)

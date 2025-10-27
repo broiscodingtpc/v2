@@ -248,35 +248,27 @@ export default function WatchlistPage() {
                     </TableHeaderCell>
                     <TableHeaderCell>Token</TableHeaderCell>
                     <TableHeaderCell align="right">Price</TableHeaderCell>
-                    <TableHeaderCell 
-                      align="right"
-                      onClick={() => handleSort('priceChangePercent24h')}
-                      className="cursor-pointer hover:text-ascii-amber"
-                    >
-                      24h Change {sortBy === 'priceChangePercent24h' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    <TableHeaderCell align="right" className="cursor-pointer hover:text-ascii-amber">
+                      <button type="button" onClick={() => handleSort('priceChangePercent24h')} className="w-full text-right">
+                        24h Change {sortBy === 'priceChangePercent24h' && (sortOrder === 'asc' ? '↑' : '↓')}
+                      </button>
                     </TableHeaderCell>
-                    <TableHeaderCell 
-                      align="right"
-                      onClick={() => handleSort('marketCap')}
-                      className="cursor-pointer hover:text-ascii-amber"
-                    >
-                      Market Cap {sortBy === 'marketCap' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    <TableHeaderCell align="right" className="cursor-pointer hover:text-ascii-amber">
+                      <button type="button" onClick={() => handleSort('marketCap')} className="w-full text-right">
+                        Market Cap {sortBy === 'marketCap' && (sortOrder === 'asc' ? '↑' : '↓')}
+                      </button>
                     </TableHeaderCell>
                     <TableHeaderCell align="right">Volume 24h</TableHeaderCell>
-                    <TableHeaderCell 
-                      align="center"
-                      onClick={() => handleSort('signalScore')}
-                      className="cursor-pointer hover:text-ascii-amber"
-                    >
-                      Signal {sortBy === 'signalScore' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    <TableHeaderCell align="center" className="cursor-pointer hover:text-ascii-amber">
+                      <button type="button" onClick={() => handleSort('signalScore')} className="w-full text-center">
+                        Signal {sortBy === 'signalScore' && (sortOrder === 'asc' ? '↑' : '↓')}
+                      </button>
                     </TableHeaderCell>
                     <TableHeaderCell align="center">Chart</TableHeaderCell>
-                    <TableHeaderCell 
-                      align="center"
-                      onClick={() => handleSort('addedAt')}
-                      className="cursor-pointer hover:text-ascii-amber"
-                    >
-                      Added {sortBy === 'addedAt' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    <TableHeaderCell align="center" className="cursor-pointer hover:text-ascii-amber">
+                      <button type="button" onClick={() => handleSort('addedAt')} className="w-full text-center">
+                        Added {sortBy === 'addedAt' && (sortOrder === 'asc' ? '↑' : '↓')}
+                      </button>
                     </TableHeaderCell>
                     <TableHeaderCell align="center">Actions</TableHeaderCell>
                   </TableRow>
@@ -343,7 +335,7 @@ export default function WatchlistPage() {
                           data={token.priceHistory}
                           width={60}
                           height={30}
-                          color={getPriceChangeColor(token.priceChangePercent24h).includes('green') ? '#00ff41' : '#ff0040'}
+                          color={getPriceChangeColor(token.priceChangePercent24h).includes('green') ? 'green' : 'red'}
                         />
                       </TableCell>
                       <TableCell align="center">

@@ -81,16 +81,17 @@ async function processTokenSocialMetrics(
       log.info(`Processing social metrics for token: ${token}`);
       
       // Get social metrics from Twitter
-      const socialMetrics = await twitterService.getTokenSocialMetrics(token);
+      const socialMetrics = await twitterService.getTokenSocialMetrics([token]);
       
-      if (socialMetrics) {
-        results.socialMetrics.push(socialMetrics);
+      if (socialMetrics && socialMetrics.length > 0) {
+        results.socialMetrics.push(...socialMetrics);
         results.processed++;
         
+        const firstMetric = socialMetrics[0];
         log.info(`Social metrics collected for ${token}`, {
-          mentions: socialMetrics.mentions,
-          sentiment: socialMetrics.sentiment,
-          engagement: socialMetrics.engagement
+          mentions: firstMetric.mentions,
+          sentiment: firstMetric.sentiment,
+          engagement: firstMetric.engagement
         });
       } else {
         log.warn(`No social metrics found for token: ${token}`);
@@ -121,13 +122,25 @@ async function processTrendingTopics(
     job.progress(75);
     
     // Get trending topics from Twitter
-    const trendingTopics = await twitterService.getTrendingCryptoTopics();
+    const trendingTopicStrings = await twitterService.getTrendingCryptoTopics();
     
-    if (trendingTopics.length > 0) {
-      results.trendingTopics.push(...trendingTopics);
+    if (trendingTopicStrings.length > 0) {
+      // Convert strings to TrendingTopic objects
+      const trendingTopicObjects = trendingTopicStrings.map(topic => ({
+        topic,
+        mentions: 0,
+        sentiment: 0,
+        volume: 0,
+        engagement: 0,
+        volume24h: 0,
+        volumeChange: 0,
+        timestamp: new Date()
+      }));
       
-      log.info(`Found ${trendingTopics.length} trending topics`, {
-        topics: trendingTopics.slice(0, 5).map(t => t.topic)
+      results.trendingTopics.push(...trendingTopicObjects);
+      
+      log.info(`Found ${trendingTopicStrings.length} trending topics`, {
+        topics: trendingTopicStrings.slice(0, 5)
       });
     }
 
@@ -147,6 +160,7 @@ async function processTrendingTopics(
             topic: keyword,
             mentions,
             sentiment: 0, // Would need sentiment analysis
+            volume: mentions, // Adding required volume field
             engagement: totalEngagement,
             volume24h: mentions,
             volumeChange: 0, // Would need historical data
@@ -214,9 +228,9 @@ async function storeSocialData(
           platform: 'twitter',
           mentions: topic.mentions,
           sentiment: topic.sentiment,
-          engagement: topic.engagement,
-          volume24h: topic.volume24h,
-          volumeChange: topic.volumeChange,
+          engagement: topic.engagement || 0,
+          volume24h: topic.volume24h || 0,
+          volumeChange: topic.volumeChange || 0,
           timestamp: topic.timestamp
         }
       });

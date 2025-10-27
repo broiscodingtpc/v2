@@ -39,15 +39,44 @@ export function useWebSocket() {
   };
 }
 
-export function useTokenSubscription(tokenAddress: string | null) {
+// Overloads: single token returns latest price data; multiple tokens invokes callback
+export function useTokenSubscription(tokenAddress: string | null): any;
+export function useTokenSubscription(tokenAddresses: string[], onUpdate: (update: any) => void): void;
+export function useTokenSubscription(arg1: string | string[] | null, arg2?: (update: any) => void) {
   const { subscribeToToken, unsubscribeFromToken, onPriceUpdate, offPriceUpdate } = useWebSocket();
+
+  // Single token mode: return latest price data
   const [priceData, setPriceData] = useState<any>(null);
 
   useEffect(() => {
+    // Multiple tokens mode with callback
+    if (Array.isArray(arg1) && typeof arg2 === 'function') {
+      const tokenAddresses = arg1;
+      const onUpdate = arg2;
+
+      const handlePriceUpdate = (data: any) => {
+        // Forward updates only for subscribed tokens
+        const address = data.tokenAddress || data.address;
+        if (!address || !tokenAddresses.includes(address)) return;
+        onUpdate({ address, ...data });
+      };
+
+      tokenAddresses.forEach(addr => subscribeToToken(addr));
+      onPriceUpdate(handlePriceUpdate);
+
+      return () => {
+        tokenAddresses.forEach(addr => unsubscribeFromToken(addr));
+        offPriceUpdate(handlePriceUpdate);
+      };
+    }
+
+    // Single token mode
+    const tokenAddress = typeof arg1 === 'string' ? arg1 : null;
     if (!tokenAddress) return;
 
     const handlePriceUpdate = (data: any) => {
-      if (data.tokenAddress === tokenAddress) {
+      const address = data.tokenAddress || data.address;
+      if (address === tokenAddress) {
         setPriceData(data);
       }
     };
@@ -59,18 +88,22 @@ export function useTokenSubscription(tokenAddress: string | null) {
       unsubscribeFromToken(tokenAddress);
       offPriceUpdate(handlePriceUpdate);
     };
-  }, [tokenAddress, subscribeToToken, unsubscribeFromToken, onPriceUpdate, offPriceUpdate]);
+  }, [arg1, arg2, subscribeToToken, unsubscribeFromToken, onPriceUpdate, offPriceUpdate]);
 
   return priceData;
 }
 
-export function useSignalSubscription() {
+export function useSignalSubscription(onSignal?: (data: any) => void) {
   const { subscribeToSignals, unsubscribeFromSignals, onSignalEvent, offSignalEvent } = useWebSocket();
   const [signalEvents, setSignalEvents] = useState<any[]>([]);
 
   useEffect(() => {
     const handleSignalEvent = (data: any) => {
-      setSignalEvents(prev => [data, ...prev.slice(0, 49)]); // Keep last 50 events
+      if (onSignal) {
+        onSignal(data);
+      } else {
+        setSignalEvents(prev => [data, ...prev.slice(0, 49)]); // Keep last 50 events
+      }
     };
 
     subscribeToSignals();
@@ -80,7 +113,7 @@ export function useSignalSubscription() {
       unsubscribeFromSignals();
       offSignalEvent(handleSignalEvent);
     };
-  }, [subscribeToSignals, unsubscribeFromSignals, onSignalEvent, offSignalEvent]);
+  }, [subscribeToSignals, unsubscribeFromSignals, onSignalEvent, offSignalEvent, onSignal]);
 
   return signalEvents;
 }
