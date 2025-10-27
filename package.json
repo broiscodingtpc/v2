@@ -1,0 +1,26 @@
+{
+  "name": "metapulse",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MetaPulse AI - Real-time market intelligence for Solana",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "clean": "pnpm -r clean",
+    "prisma:migrate": "pnpm --filter @metapulse/db prisma migrate dev",
+    "prisma:deploy": "pnpm --filter @metapulse/db prisma migrate deploy",
+    "prisma:generate": "pnpm --filter @metapulse/db prisma generate",
+    "prisma:studio": "pnpm --filter @metapulse/db prisma studio"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "turbo": "^1.11.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

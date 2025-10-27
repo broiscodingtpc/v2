@@ -1,0 +1,294 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for bot users
+model User {
+  id          String   @id @default(cuid())
+  telegramId  String   @unique
+  username    String?
+  firstName   String?
+  lastName    String?
+  isActive    Boolean  @default(true)
+  settings    Json?    // User preferences and settings
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  watchlist   WatchlistItem[]
+  alerts      Alert[]
+
+  @@map("users")
+}
+
+// Token model for cryptocurrency tokens
+model Token {
+  id            String   @id @default(cuid())
+  address       String   @unique
+  symbol        String
+  name          String
+  network       String
+  price         Float
+  priceChange24h Float?
+  volume24h     Float
+  marketCap     Float?
+  liquidity     Float?
+  fdv           Float?   // Fully Diluted Valuation
+  holders       Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  tokenMetrics      TokenMetrics[]
+  socialMetrics     SocialMetrics[]
+  technicalAnalysis TechnicalAnalysis[]
+  sentimentAnalysis SentimentAnalysis[]
+  aiAnalysis        AIAnalysis[]
+  signals           Signal[]
+  watchlistItems    WatchlistItem[]
+  alerts            Alert[]
+
+  @@map("tokens")
+}
+
+// Token metrics for historical price and volume data
+model TokenMetrics {
+  id                  String   @id @default(cuid())
+  tokenAddress        String
+  price               Float
+  volume24h           Float
+  marketCap           Float?
+  liquidity           Float?
+  priceChange1h       Float?
+  priceChange24h      Float?
+  priceChange7d       Float?
+  volumeChange24h     Float?
+  liquidityChange24h  Float?
+  holderCount         Int?
+  holderChange24h     Int?
+  timestamp           DateTime @default(now())
+
+  // Relations
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  @@map("token_metrics")
+  @@index([tokenAddress, timestamp])
+}
+
+// Social media metrics
+model SocialMetrics {
+  id                 String   @id @default(cuid())
+  tokenAddress       String
+  platform           String   // twitter, reddit, etc.
+  mentions           Int
+  sentiment          Float    // -1 to 1
+  engagement         Float
+  followers          Int?
+  influencerMentions Int      @default(0)
+  hashtagCount       Int      @default(0)
+  timestamp          DateTime @default(now())
+
+  // Relations
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  @@map("social_metrics")
+  @@index([tokenAddress, platform, timestamp])
+}
+
+// Technical analysis results
+model TechnicalAnalysis {
+  id             String   @id @default(cuid())
+  tokenAddress   String
+  timeframe      String   // 1h, 4h, 24h, etc.
+  indicators     Json     // RSI, MACD, etc.
+  signals        Json     // Buy/sell signals
+  support        Float?
+  resistance     Float?
+  trend          String   // bullish, bearish, neutral
+  strength       Float    // 0-1
+  recommendation String   // buy, sell, hold
+  confidence     Float    // 0-1
+  analysis       String   // Text analysis
+  timestamp      DateTime @default(now())
+
+  // Relations
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  @@map("technical_analysis")
+  @@index([tokenAddress, timestamp])
+}
+
+// Sentiment analysis results
+model SentimentAnalysis {
+  id           String   @id @default(cuid())
+  tokenAddress String
+  overall      Float    // Overall sentiment score
+  social       Float    // Social media sentiment
+  news         Float    // News sentiment
+  technical    Float    // Technical sentiment
+  factors      Json     // Contributing factors
+  confidence   Float    // 0-1
+  summary      String   // Text summary
+  timestamp    DateTime @default(now())
+
+  // Relations
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  @@map("sentiment_analysis")
+  @@index([tokenAddress, timestamp])
+}
+
+// AI analysis results
+model AIAnalysis {
+  id             String   @id @default(cuid())
+  tokenAddress   String
+  type           String   // comprehensive, quick, etc.
+  summary        String
+  keyPoints      Json     // Array of key points
+  riskLevel      String   // low, medium, high
+  timeHorizon    String   // 1h, 4h, 24h, 7d
+  confidence     Float    // 0-1
+  recommendation String   // buy, sell, hold
+  targetPrice    Float?
+  stopLoss       Float?
+  metadata       Json     // Model info, processing time, etc.
+  timestamp      DateTime @default(now())
+
+  // Relations
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  @@map("ai_analysis")
+  @@index([tokenAddress, timestamp])
+}
+
+// Trading signals
+model Signal {
+  id           String    @id @default(cuid())
+  tokenAddress String
+  type         String    // technical, social, ai, momentum, volume
+  action       String    // buy, sell, hold, watch
+  strength     Float     // 0-1
+  confidence   Float     // 0-1
+  price        Float     // Signal price
+  targetPrice  Float?    // Target price
+  stopLoss     Float?    // Stop loss price
+  timeframe    String    // Signal timeframe
+  riskLevel    String    // low, medium, high
+  description  String    // Signal description
+  reasoning    String    // Why this signal was generated
+  metadata     Json      // Additional signal data
+  status       String    @default("active") // active, expired, triggered
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime?
+
+  // Relations
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  @@map("signals")
+  @@index([tokenAddress, status, createdAt])
+}
+
+// User watchlist
+model WatchlistItem {
+  id           String   @id @default(cuid())
+  userId       String
+  tokenAddress String
+  addedAt      DateTime @default(now())
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  @@unique([userId, tokenAddress])
+  @@map("watchlist_items")
+}
+
+// Price alerts
+model Alert {
+  id           String   @id @default(cuid())
+  userId       String
+  tokenAddress String
+  type         String   // price_above, price_below, volume_spike, etc.
+  condition    Json     // Alert conditions
+  isActive     Boolean  @default(true)
+  triggered    Boolean  @default(false)
+  triggeredAt  DateTime?
+  createdAt    DateTime @default(now())
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  @@map("alerts")
+  @@index([userId, isActive])
+}
+
+// Trending topics from social media
+model TrendingTopic {
+  id           String   @id @default(cuid())
+  topic        String
+  platform     String   // twitter, reddit, etc.
+  mentions     Int
+  sentiment    Float    // -1 to 1
+  engagement   Float
+  volume24h    Int
+  volumeChange Float
+  timestamp    DateTime @default(now())
+
+  @@map("trending_topics")
+  @@index([platform, timestamp])
+}
+
+// Market overview snapshots
+model MarketOverview {
+  id           String   @id @default(cuid())
+  statistics   Json     // Market statistics
+  analysis     String   // AI-generated market analysis
+  sentiment    Float    // Overall market sentiment
+  riskLevel    String   // low, medium, high
+  topPerformers Json    // Top performing tokens
+  timestamp    DateTime @default(now())
+
+  @@map("market_overviews")
+  @@index([timestamp])
+}
+
+// Job execution logs
+model JobLog {
+  id          String   @id @default(cuid())
+  jobId       String
+  jobType     String
+  status      String   // pending, running, completed, failed
+  startedAt   DateTime?
+  completedAt DateTime?
+  duration    Int?     // Duration in milliseconds
+  result      Json?    // Job result data
+  error       String?  // Error message if failed
+  metadata    Json?    // Additional job metadata
+  createdAt   DateTime @default(now())
+
+  @@map("job_logs")
+  @@index([jobType, status, createdAt])
+}
+
+// System health metrics
+model HealthMetric {
+  id        String   @id @default(cuid())
+  service   String   // worker, api, bot
+  metric    String   // cpu, memory, response_time, etc.
+  value     Float
+  unit      String   // %, ms, MB, etc.
+  status    String   // healthy, warning, critical
+  timestamp DateTime @default(now())
+
+  @@map("health_metrics")
+  @@index([service, metric, timestamp])
+}

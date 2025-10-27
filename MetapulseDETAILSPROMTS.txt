@@ -1,0 +1,732 @@
+META PULSE AI — Production Build Plan (Telegram Bot + ASCII Steampunk Website)
+MetaPulse AI — real-time market intelligence for Solana.
+Signals you can read, decisions you can own.
+
+0) Scope & Principles
+
+Deliverables:
+
+Telegram Bot (full menu, watchlists, alerts, account linking)
+
+Website (ASCII/steampunk theme): Home, Project, Whitepaper (non-technical), Tokens (Top/Trending/HOT Metas), Roadmap, Join
+
+Backend API (NestJS/TS) + Worker (ingestion/rules/AI pipelines)
+
+Railway deploy for: web, api, bot, worker, postgres
+
+Only use: PumpPortal, DexScreener, Groq, Gemini, Twitter/X, Railway (incl. Railway Postgres).
+
+Free at launch; paywall codepaths implemented but left open.
+
+No auto-trading; users remain in control.
+
+Accessible, keyboard-first UI; no emojis.
+
+1) Monorepo Layout (pnpm workspaces)
+metapulse/
+  apps/
+    web/            # Next.js 14 (App Router), ASCII steampunk UI
+    api/            # NestJS REST+WS, auth, business logic
+    bot/            # Telegraf webhook bot, full menu
+    worker/         # Node jobs: ingestion/rules/AI pipelines
+  packages/
+    db/             # Prisma schema, migrations, seed
+    shared/         # Types, DTOs, utils, validators
+    ui/             # ASCII React components (frames, tables, tabs)
+  docs/
+    METAPULSE_PROJECT_PLAN.md  # this file
+    API_SPEC.md
+    RUNBOOKS.md
+  .tool-versions    # optional (node)
+  package.json
+  pnpm-workspace.yaml
+  turbo.json        # optional, if using Turborepo
+
+2) Technology Choices (best options)
+
+Language: TypeScript strict across repo.
+
+Backend: NestJS (structured modules, DI, pipes/guards/filters).
+
+Frontend: Next.js 14 App Router, React Server Components, Tailwind (for spacing/typography), custom ASCII renderer.
+
+Bot: Telegraf (webhook mode).
+
+DB: PostgreSQL on Railway + pgvector for semantic search.
+
+ORM: Prisma.
+
+Queues: Start with cron + durable tables; scale to Redis later if needed.
+
+Auth: Telegram login (initData HMAC) → API issues JWT (HttpOnly cookie).
+
+Realtime: WebSocket (NestJS gateway) or SSE; WS recommended for multiplexing.
+
+Logging: Pino structured logs, request IDs.
+
+Testing: Vitest + Supertest (API), Playwright (Web), telegraf test harness (Bot).
+
+3) Environment Variables (.env template)
+# Common
+NODE_ENV=production
+LOG_LEVEL=info
+
+# Database
+DATABASE_URL=postgresql://user:pass@host:5432/metapulse
+
+# JWT & Signing
+JWT_SECRET=change_me
+INTERNAL_HMAC_SECRET=change_me_internal
+
+# Providers
+DEXSCREENER_BASE_URL=https://api.dexscreener.com
+TWITTER_BEARER_TOKEN=change_me
+PUMPPORTAL_BASE_URL=https://api.pumpportal.xyz
+GROQ_API_KEY=change_me
+GEMINI_API_KEY=change_me
+
+# Web
+PUBLIC_WEB_URL=https://app.metapulse.ai
+
+# Bot
+TELEGRAM_BOT_TOKEN=change_me
+BOT_WEBHOOK_SECRET=change_me
+BOT_PUBLIC_URL=https://bot.metapulse.ai
+
+# API
+ALLOWED_ORIGINS=https://app.metapulse.ai
+
+4) Database Schema (Prisma)
+
+packages/db/schema.prisma
+
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+
+model User {
+  id                String   @id @default(cuid())
+  telegramUserId    String   @unique
+  handle            String?
+  role              Role     @default(FREE)
+  status            UserStatus @default(ACTIVE)
+  createdAt         DateTime @default(now())
+  watchlist         WatchlistItem[]
+  apiKeys           ApiKey[]
+  alerts            UserAlertLog[]
+  authLinks         AuthLink[]
+}
+
+enum Role { FREE PRO ADMIN }
+enum UserStatus { ACTIVE BANNED }
+
+model AuthLink {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  nonce     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model Token {
+  id          String   @id @default(cuid())
+  chain       String   @default("sol")
+  mint        String   @unique
+  symbol      String?
+  name        String?
+  discoveredAt DateTime @default(now())
+  lastSeenAt  DateTime?
+  pairs       Pair[]
+  reports     AnalystReport[]
+  vectors     VectorDoc[]
+  mentions    SocialMention[]
+}
+
+model Pair {
+  id        String   @id @default(cuid())
+  tokenId   String
+  token     Token    @relation(fields: [tokenId], references: [id])
+  dexId     String
+  base      String
+  quote     String
+  liqUsd    Decimal  @db.Decimal(18,6)
+  price     Decimal  @db.Decimal(24,12)
+  vol5m     Decimal  @db.Decimal(18,6)
+  vol1h     Decimal  @db.Decimal(18,6)
+  vol24h    Decimal  @db.Decimal(18,6)
+  updatedAt DateTime @default(now())
+}
+
+model WatchlistItem {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenId    String
+  user       User     @relation(fields: [userId], references: [id])
+  token      Token    @relation(fields: [tokenId], references: [id])
+  alertPrefs Json
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, tokenId])
+}
+
+model SignalEvent {
+  id         String   @id @default(cuid())
+  tokenId    String
+  pairId     String?
+  kind       String   // volume_spike | liq_drop | new_pair | social_spike | whale_move
+  metrics    Json
+  occurredAt DateTime @default(now())
+  scores     SignalScore[]
+}
+
+model SignalScore {
+  id            String   @id @default(cuid())
+  signalEventId String
+  signalEvent   SignalEvent @relation(fields: [signalEventId], references: [id])
+  score         Decimal  @db.Decimal(5,2)
+  label         String
+  model         String   @default("groq")
+  features      Json
+  createdAt     DateTime @default(now())
+}
+
+model AnalystReport {
+  id            String   @id @default(cuid())
+  tokenId       String
+  signalEventId String?
+  token         Token    @relation(fields: [tokenId], references: [id])
+  summaryShort  String
+  summaryLong   String
+  riskSummary   String
+  model         String   @default("gemini")
+  createdAt     DateTime @default(now())
+}
+
+model SocialMention {
+  id          String   @id @default(cuid())
+  tokenId     String
+  token       Token    @relation(fields: [tokenId], references: [id])
+  tweetId     String   @unique
+  author      String
+  followers   Int
+  engagement  Json
+  createdAt   DateTime @default(now())
+}
+
+model UserAlertLog {
+  id            String   @id @default(cuid())
+  userId        String
+  signalEventId String
+  channel       String   // telegram | web
+  deliveredAt   DateTime @default(now())
+  status        String
+  failReason    String?
+  user          User     @relation(fields: [userId], references: [id])
+  signalEvent   SignalEvent @relation(fields: [signalEventId], references: [id])
+}
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  userId     String
+  label      String
+  hashedKey  String   @unique
+  scopes     String[]
+  createdAt  DateTime @default(now())
+  revokedAt  DateTime?
+}
+
+model JobCursor {
+  id        String   @id @default(cuid())
+  source    String   @unique   // dexscreener | twitter | ...
+  cursor    Json
+  updatedAt DateTime @default(now())
+}
+
+// Vectors (pgvector)
+model VectorDoc {
+  id        String   @id @default(cuid())
+  tokenId   String?
+  token     Token?   @relation(fields: [tokenId], references: [id])
+  kind      String   // report | tweet | note
+  content   String
+  embedding Vector   // pgvector
+}
+
+
+Migration snippet to enable pgvector:
+
+-- packages/db/migrations/xxxx_init/pg.sql
+CREATE EXTENSION IF NOT EXISTS vector;
+
+5) API Contracts (REST + WS)
+
+Auth
+
+POST /auth/telegram/consume → { nonce, initData } → verifies Telegram HMAC → sets HttpOnly JWT cookie.
+
+GET /me → profile + entitlements.
+
+Tokens
+
+GET /api/tokens/top?limit=50
+
+Returns: [ { mint, symbol, price, delta5m, vol1h, vol24h, liqUsd, updatedAt } ]
+
+GET /api/tokens/trending?window=10m&limit=50
+
+Returns: [ { mint, symbol, spikeScore, delta5m, trades5m, socialPulse, note } ]
+
+GET /api/tokens/hot-metas
+
+Returns: [ { theme, tokens: string[], heat } ]
+
+Watchlist
+
+GET /api/watchlist
+
+POST /api/watchlist { mint, alertPrefs }
+
+DELETE /api/watchlist/:id
+
+Signals & Reports
+
+GET /api/signals/recent?token=mint
+
+GET /api/reports/:mint → latest analyst report
+
+Bot Webhook
+
+POST /bot/webhook?token=<BOT_WEBHOOK_SECRET> (HMAC header required)
+
+WebSocket Topics
+
+pair:update, signal:new, report:new
+
+6) Telegram Bot (Telegraf) — Menu & Flows
+
+Commands
+
+/start — link account (deep link to web) + onboarding
+
+/menu — render main keyboard
+
+Main Menu
+
+Watchlist → [List] [Add] [Remove]
+
+Alerts → toggles: Volume Spike, Liquidity Drop, Social Spike, New Pair
+
+Reports → list recent; inline buttons: [Open Web] [Get Summary]
+
+Search → by symbol/mint; inline: [Add to Watchlist]
+
+Settings → timezone, alert frequency, noise filters
+
+Account → show role (Free), regenerate link, sessions
+
+Alert Message (example)
+
+[ Volume Spike ] ABC (SOL)
+Price: 0.001923  Δ5m: +12.4%
+Vol 5m: $57,231  Liquidity: $88,002
+Risk: [#####-----] 5/10
+
+[Report] [Open Web] [Mute Token]
+
+7) ASCII Steampunk UI — Components
+
+Frame
+
+╔════════════════════════════════════════════════════╗
+║ Title                                              ║
+╠════════════════════════════════════════════════════╣
+║ content...                                         ║
+╚════════════════════════════════════════════════════╝
+
+
+Tabs
+
+[ Home ] [ Project ] [ Whitepaper ] [ Tokens ] [ Roadmap ] [ Join ]
+
+
+Sparklines
+Use Unicode braille or ASCII: ▁▂▃▄▅▆▇█ or .-^~ minimal.
+
+Meters
+
+Risk:        [#####-----] 5/10
+Social Heat: [########--] 8/10
+
+8) Ingestion, Scoring & Rate Limits
+
+DexScreener (poll)
+
+Cadence: 60–90s staggered; maintain job_cursor.
+
+Upsert pairs; compute deltas (5m/1h/24h) in SQL or worker.
+
+Twitter/X
+
+Filtered stream or polling search windows
+
+Aggregate per 5–10m window, weight by author followers
+
+PumpPortal
+
+On-demand pre-trade preview/simulate; do not auto-execute
+
+Scoring
+
+Trending Spike Score (example):
+
+spike = 0.4*z(vol5m) + 0.25*z(trades5m) + 0.2*z(price5m) + 0.15*z(social)
+
+
+Top Ranking (liquidity & 24h volume):
+
+rank = 0.6*log(1+liqUsd) + 0.4*log(1+vol24hUsd)
+
+
+HOT Metas: cluster keywords from recent mentions; show top 3–5 themes.
+
+Rate-limit strategy
+
+Central fetcher with leaky-bucket + jitter.
+
+Serve cached payloads on 429/5xx; banner:
+
+[ Data Source Cooldown ] Serving cached results (updated HH:MM UTC)
+
+9) AI Prompts (save as /packages/shared/prompts.ts)
+
+Groq — Scoring (system)
+
+You are a fast market signal classifier. Output concise JSON with fields:
+score (0..10), label (one of: low, medium, high), rationale (<=180 chars).
+Consider price/volume/liquidity deltas and social pulse features only.
+Do not provide advice or instructions to trade.
+
+
+Groq — Scoring (user template)
+
+FEATURES:
+token: {{symbol}} ({{mint}})
+price_5m_delta: {{price5m}}
+vol_5m_delta: {{vol5m}}
+trades_5m_delta: {{trades5m}}
+liq_delta_30m: {{liq30m}}
+social_pulse: {{socialPulse}}
+context_notes: {{notes}}
+
+Return JSON only.
+
+
+Gemini — Analyst Report (system)
+
+You write clear, neutral, human-grade market summaries. No financial advice.
+Structure sections: Market Context, On-chain/Trading Notes, Social Pulse,
+Risk Factors, Actionable Considerations (neutral, general). Max 400 words.
+
+
+Gemini — Analyst Report (user template)
+
+TOKEN: {{symbol}} ({{mint}})
+WINDOW: last 60 minutes
+METRICS:
+- Price Δ5m: {{price5m}}
+- Volume 5m / 1h / 24h: {{vol5m}} / {{vol1h}} / {{vol24h}}
+- Liquidity: {{liqUsd}}
+- Social Pulse: {{socialPulse}} (0..10)
+
+RECENT SIGNALS: {{signalsCompact}}
+NOTES: {{notes}}
+
+Generate sections as instructed. Avoid hype. No emojis. No advice.
+
+10) Website Copy (ready to paste)
+
+Home Hero
+
+MetaPulse AI — real-time market intelligence for Solana.
+Signals you can read, decisions you can own.
+
+
+Project Page
+
+MetaPulse AI focuses on Solana market micro-structure and community momentum.
+We surface anomalies early, explain them clearly, and help you act with confidence.
+
+Principles: signal over noise, transparency over hype, your decision, your custody.
+
+Twitter: @MetaPulse_AI   |   Telegram: t.me/metapulse_ai
+
+
+Whitepaper (non-technical)
+
+Executive Summary, Problem, Solution, Utility & Value, Scope, Risk & Ethics, Monetization (future), Roadmap, Disclaimers.
+(Use the text blocks from our earlier spec.)
+
+Tokens Page Legend
+
+Δ5m = 5-minute change | Social Pulse = relative mention strength | Heat = theme momentum
+
+11) Security & Compliance
+
+Validate Telegram initData HMAC.
+
+JWT HttpOnly + SameSite=strict; short TTL with server refresh.
+
+HMAC for bot→api and worker→api (X-Signature).
+
+DTO validation (class-validator/zod), sanitize input, parameterized DB.
+
+RBAC by role + entitlements; log admin actions.
+
+Rate-limit per IP/user; backoff on provider errors.
+
+Clear disclaimers; no automated trading.
+
+12) Deployment on Railway (summary)
+
+Create Railway project: services postgres, api, web, bot, worker.
+
+Attach Postgres; set DATABASE_URL on all.
+
+Set ENV vars per service (see section 3).
+
+packages/db: run migrations on api startup or via CI step:
+
+pnpm prisma migrate deploy
+
+Ensure CREATE EXTENSION vector; ran once.
+
+Health checks:
+
+API: /healthz
+
+Worker: periodic log heartbeat
+
+Bot: /healthz + webhook registered: POST https://bot…/bot/webhook?token=BOT_WEBHOOK_SECRET
+
+Point PUBLIC_WEB_URL + CORS ALLOWED_ORIGINS.
+
+Verify linking flow (bot → web → api).
+
+13) Acceptance Criteria (go/no-go)
+
+User can:
+
+start bot, link account, see watchlist (empty), add token by symbol/mint.
+
+receive alerts for rules (volume spike, liquidity drop, new pair, social spike).
+
+open token page on web, see live data, analyst report, social pulse.
+
+view Top/Trending/HOT Metas with timestamps; list updates within free-tier limits.
+
+Admin can see diagnostics page with cursors & recent errors (ASCII).
+
+All pages render without images/emojis; keyboard navigation works.
+
+System survives provider hiccups by serving cached data with banner.
+
+14) Test Plan (essential)
+
+Unit: feature extraction, scoring transforms, HMAC validators, Telegram initData verify.
+
+Integration: auth link, watchlist CRUD, signal ingestion → alert dispatch.
+
+Worker: replay fixtures for DexScreener/X; deterministic outcomes.
+
+Bot: menu navigation, inline buttons, rate-limited spam tests.
+
+Web: Playwright—login, add/remove watch, open report, tabs switch.
+
+Perf: autocannon on /api/tokens/* endpoints; ensure low p95.
+
+Chaos: simulate provider 429/5xx; ensure cached responses and banners.
+
+15) Developer Runbook (local)
+pnpm i
+# envs in apps/*/.env or root .env
+pnpm -w build
+pnpm -w prisma:migrate   # script to run `prisma migrate dev`
+pnpm -w dev              # runs api/web/bot/worker concurrently
+
+
+Smoke flow:
+
+Start bot with ngrok tunnel → set webhook to local bot URL.
+
+/start → link → web session.
+
+Add token → trigger a synthetic signal (fixture) → receive alert → open report.
+
+16) Example File Trees & Stubs
+
+apps/web/app/(routes)
+
+/ (home)
+/project
+/whitepaper
+/tokens
+/roadmap
+/join
+/token/[mint]
+
+
+ASCII React primitives (packages/ui)
+
+AsciiFrame
+
+AsciiTabs
+
+AsciiTable
+
+AsciiMeter
+
+AsciiSparkline
+
+API modules (apps/api/src)
+
+auth, tokens, watchlist, signals, reports, bot, ws
+
+Worker jobs (apps/worker/src)
+
+ingestDex.ts, ingestX.ts, computeSignals.ts, aiGroq.ts, aiGemini.ts, dispatchAlerts.ts
+
+17) Example JSON Responses
+
+GET /api/tokens/top
+
+[
+  {
+    "mint": "So11111111111111111111111111111111111111112",
+    "symbol": "ABC",
+    "price": 0.001923,
+    "delta5m": 0.124,
+    "vol1h": 57231.0,
+    "vol24h": 804112.0,
+    "liqUsd": 1202443.0,
+    "updatedAt": "2025-10-27T09:31:00Z"
+  }
+]
+
+
+GET /api/tokens/trending
+
+[
+  {
+    "mint": "So1111...",
+    "symbol": "ABC",
+    "spikeScore": 7.2,
+    "delta5m": 0.124,
+    "trades5m": 312,
+    "socialPulse": 8.0,
+    "note": "5m spike with strong social mentions"
+  }
+]
+
+
+GET /api/tokens/hot-metas
+
+[
+  { "theme": "AI/Agents", "tokens": ["PULSE","AIBOT","NEXUS"], "heat": 7 },
+  { "theme": "Gaming", "tokens": ["DRACO","PIXEL","ARENA"], "heat": 6 }
+]
+
+18) Commit Message & Branching Guidance
+
+Branches: feat/*, fix/*, chore/*, docs/*.
+
+Conventional commits:
+
+feat(api): add trending endpoint
+
+feat(bot): watchlist menu
+
+feat(web): ascii meters and tabs
+
+feat(worker): dexscreener ingestion
+
+chore(ci): add prisma migrate deploy
+
+docs: add runbook for railway
+
+Protect main; require tests passing.
+
+19) Production Run Settings
+
+API & Worker: LOG_LEVEL=info, request timeouts (10s), retry budget with jitter.
+
+Web: static assets compressed, HTTP/2 enabled by Railway.
+
+DB: statement_timeout 5s, connection pool sized per dyno.
+
+Observability: structured logs + minimal /readyz and /healthz.
+
+20) Hand-off Prompts for Codegen AI (save as /docs/AI_BUILDER_PROMPTS.md)
+
+Monorepo Scaffold
+
+Create a pnpm monorepo with apps (web, api, bot, worker) and packages (db, shared, ui).
+TypeScript strict. Configure Next.js 14 in web, NestJS in api, Telegraf in bot.
+Add Prisma in packages/db with the provided schema. Add scripts to build/dev/test.
+
+
+ASCII UI
+
+Implement React components AsciiFrame, AsciiTabs, AsciiTable, AsciiMeter, AsciiSparkline.
+Theme colors brass/copper/parchment/soot. No emojis. Keyboard accessible.
+Build pages: /, /project, /whitepaper, /tokens, /roadmap, /join, /token/[mint].
+Render tokens tables with server data from /api/tokens/* endpoints.
+
+
+API & Auth
+
+Build NestJS modules for auth/tokens/watchlist/signals/reports/ws.
+Implement Telegram login consume endpoint validating initData HMAC, issuing HttpOnly JWT.
+Implement REST endpoints specified in API contracts. Add WS gateway for pair:update, signal:new, report:new.
+Add guards for JWT, role-based entitlements.
+
+
+Worker & Providers
+
+Build DexScreener polling job (60–90s jitter) upserting tokens/pairs.
+Implement trending and top ranking functions. Maintain cursors in JobCursor.
+Add Twitter mentions aggregator. Integrate Groq scoring and Gemini report writer using the provided prompts.
+Dispatch alerts to Telegram Bot via API with HMAC.
+
+
+Bot
+
+Create Telegraf webhook bot with /start, /menu. Implement menus for Watchlist, Alerts, Reports, Search, Settings, Account.
+Implement Link flow: /start calls API to create auth link, returns deep link to web with nonce.
+Alerts contain inline buttons [Report] [Open Web] [Mute Token].
+
+
+Deployment
+
+Add Railway configs for web, api, bot, worker, postgres. On deploy, run prisma migrate deploy.
+Expose health endpoints. Configure bot webhook with BOT_WEBHOOK_SECRET. Set CORS and PUBLIC_WEB_URL.
+
+21) Final Checklist Before Launch
+
+ Migrations applied; pgvector enabled.
+
+ Telegram HMAC verified; link flow works end-to-end.
+
+ Top/Trending/HOT Metas render with timestamps and update within free-tier limits.
+
+ Alerts delivered; user can mute per token.
+
+ Analyst Reports generate and are viewable.
+
+ Cached fallback with “Data Source Cooldown” banner on rate-limit.
+
+ Terms/Privacy footer visible. “Not financial advice” present.
+
+ Observability: logs show ingestion cadence and error counts.
+
+ Backups enabled on Railway Postgres.

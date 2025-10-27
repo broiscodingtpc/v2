@@ -1,0 +1,218 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ASCII Steampunk Theme */
+:root {
+  --ascii-green: #00ff41;
+  --ascii-amber: #ffb000;
+  --ascii-red: #ff4444;
+  --ascii-blue: #4488ff;
+  --ascii-gray: #888888;
+  --ascii-dark: #111111;
+}
+
+body {
+  background-color: #000000;
+  color: var(--ascii-green);
+  font-family: 'Courier New', monospace;
+  line-height: 1.4;
+}
+
+/* ASCII Frame Styles */
+.ascii-frame {
+  border: 2px solid var(--ascii-green);
+  background-color: rgba(0, 0, 0, 0.8);
+  padding: 1rem;
+  margin: 0.5rem 0;
+}
+
+.ascii-frame-title {
+  background-color: #000000;
+  color: var(--ascii-amber);
+  padding: 0 0.5rem;
+  position: relative;
+  top: -0.75rem;
+  left: 1rem;
+  display: inline-block;
+  font-weight: bold;
+}
+
+/* ASCII Button Styles */
+.ascii-button {
+  background-color: transparent;
+  border: 1px solid var(--ascii-green);
+  color: var(--ascii-green);
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.ascii-button:hover {
+  background-color: var(--ascii-green);
+  color: #000000;
+}
+
+.ascii-button:active {
+  background-color: var(--ascii-amber);
+  border-color: var(--ascii-amber);
+}
+
+.ascii-button.active {
+  background-color: var(--ascii-green);
+  color: #000000;
+}
+
+/* ASCII Table Styles */
+.ascii-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Courier New', monospace;
+}
+
+.ascii-table th,
+.ascii-table td {
+  border: 1px solid var(--ascii-green);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.ascii-table th {
+  background-color: rgba(0, 255, 65, 0.1);
+  color: var(--ascii-amber);
+  font-weight: bold;
+}
+
+.ascii-table tr:nth-child(even) {
+  background-color: rgba(0, 255, 65, 0.05);
+}
+
+.ascii-table tr:hover {
+  background-color: rgba(0, 255, 65, 0.1);
+}
+
+/* ASCII Input Styles */
+.ascii-input {
+  background-color: transparent;
+  border: 1px solid var(--ascii-green);
+  color: var(--ascii-green);
+  padding: 0.5rem;
+  font-family: inherit;
+  width: 100%;
+}
+
+.ascii-input:focus {
+  outline: none;
+  border-color: var(--ascii-amber);
+  box-shadow: 0 0 5px var(--ascii-amber);
+}
+
+.ascii-input::placeholder {
+  color: var(--ascii-gray);
+}
+
+/* ASCII Meter Styles */
+.ascii-meter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: 'Courier New', monospace;
+}
+
+.ascii-meter-bar {
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0;
+}
+
+/* ASCII Sparkline Styles */
+.ascii-sparkline {
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: pre;
+}
+
+/* Status Colors */
+.status-positive {
+  color: var(--ascii-green);
+}
+
+.status-negative {
+  color: var(--ascii-red);
+}
+
+.status-neutral {
+  color: var(--ascii-gray);
+}
+
+.status-warning {
+  color: var(--ascii-amber);
+}
+
+.status-info {
+  color: var(--ascii-blue);
+}
+
+/* Loading Animation */
+.ascii-loading {
+  animation: ascii-blink 1s infinite;
+}
+
+@keyframes ascii-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ascii-green);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ascii-amber);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .ascii-frame {
+    padding: 0.5rem;
+    margin: 0.25rem 0;
+  }
+  
+  .ascii-table {
+    font-size: 0.875rem;
+  }
+  
+  .ascii-table th,
+  .ascii-table td {
+    padding: 0.25rem;
+  }
+}
+
+/* Utility Classes */
+.text-glow {
+  text-shadow: 0 0 10px currentColor;
+}
+
+.border-glow {
+  box-shadow: 0 0 10px var(--ascii-green);
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px var(--ascii-green); }
+  50% { box-shadow: 0 0 20px var(--ascii-green); }
+}
