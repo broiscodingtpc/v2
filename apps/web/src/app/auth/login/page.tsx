@@ -49,7 +49,8 @@ function LoginPageContent() {
 
   const handleTelegramLogin = () => {
     // Redirect to Telegram bot for authentication
-    window.open('https://t.me/metapulsev2_bot?start=auth', '_blank');
+    const username = (process.env.NEXT_PUBLIC_BOT_USERNAME || 'metapulsev2_bot').replace(/^@/, '');
+    window.open(`https://t.me/${username}?start=auth`, '_blank');
   };
 
   if (loading || authLoading) {
@@ -127,7 +128,7 @@ function LoginPageContent() {
                 </p>
                 <ol className="font-mono text-xs text-ascii-gray-500 space-y-1 text-left">
                   <li>1. Click "Login with Telegram"</li>
-                  <li>2. Start conversation with @metapulsev2_bot</li>
+                  <li>2. Start conversation with @{(process.env.NEXT_PUBLIC_BOT_USERNAME || 'metapulsev2_bot').replace(/^@/, '')}</li>
                   <li>3. Follow the authentication instructions</li>
                   <li>4. Return to this page when complete</li>
                 </ol>

@@ -75,7 +75,7 @@ export function Footer() {
             <ul className="space-y-2">
               <li>
                 <a 
-                  href="https://t.me/metapulsev2_bot" 
+                  href={`https://t.me/${(process.env.NEXT_PUBLIC_BOT_USERNAME || 'metapulsev2_bot').replace(/^@/, '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-sm text-ascii-gray-400 hover:text-ascii-green transition-colors"
