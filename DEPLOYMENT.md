@@ -13,6 +13,20 @@ The MetaPulse platform consists of four main services:
 
 ## 🚀 Railway Deployment
 
+### Quick Fix Checklist (Railway)
+
+- Create separate Railway services for each subdirectory: `apps/web`, `apps/api`, `apps/bot`, and `apps/worker`.
+- Web service: set `NEXT_PUBLIC_API_URL` to your API service URL (no trailing `/api`), `NEXT_PUBLIC_WS_URL` to `wss://<api-service>`, `NEXT_PUBLIC_BOT_USERNAME` to `@metapulsemetabot`, `NEXTAUTH_URL` to your web URL, and `NEXTAUTH_SECRET`.
+- API service: set `PORT=$PORT`, `DATABASE_URL`, `JWT_SECRET`, and `ALLOWED_ORIGINS` to include your web URL (comma-separated if multiple origins).
+- Bot service: set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_URL` to your bot service URL (no `/webhook` suffix; the app appends it), `TELEGRAM_WEBHOOK_SECRET`, and `API_BASE_URL` to `https://<api-service>/api`.
+- Worker service: set `PORT=$PORT`, `DATABASE_URL`, and any external API keys needed.
+- Remove unused `WEB_PORT` and `BOT_PORT` env vars — the platform-provided `PORT` is used.
+- Verify:
+  - API health: `GET https://<api-service>/api/health`
+  - Web loads and can fetch from API without CORS errors
+  - Bot logs show “Webhook set to: <bot-url>/webhook” and responds to `/health`
+  - Worker logs show DB activity (pairs/mentions/reports populated)
+
 ### Prerequisites
 
 - Railway account
@@ -49,15 +63,13 @@ Deploy each service separately:
    - Set root directory to `apps/api`
 
 2. **Environment Variables**:
-   ```bash
-   NODE_ENV=production
-   PORT=$PORT
-   DATABASE_URL=${{Postgres.DATABASE_URL}}
-   JWT_SECRET=your-super-secret-jwt-key-here
-   CORS_ORIGIN=https://your-web-app.railway.app
-   RATE_LIMIT_TTL=60
-   RATE_LIMIT_LIMIT=100
-   ```
+  ```bash
+  NODE_ENV=production
+  PORT=$PORT
+  DATABASE_URL=${{Postgres.DATABASE_URL}}
+  JWT_SECRET=your-super-secret-jwt-key-here
+  ALLOWED_ORIGINS=https://your-web-app.railway.app
+  ```
 
 3. **Build Configuration**:
    Railway will automatically detect the build configuration from `railway.json`
@@ -70,17 +82,17 @@ Deploy each service separately:
    - Set root directory to `apps/bot`
 
 2. **Environment Variables**:
-   ```bash
-   NODE_ENV=production
-   BOT_TOKEN=your-telegram-bot-token
-   API_BASE_URL=https://your-api-service.railway.app
-   API_KEY=your-api-key
-   WEBHOOK_URL=https://your-bot-service.railway.app/webhook
-   WEBHOOK_SECRET=your-webhook-secret
-   RATE_LIMIT_WINDOW=60000
-   RATE_LIMIT_MAX=30
-   ENABLE_WEBHOOK=true
-   ```
+  ```bash
+  NODE_ENV=production
+  TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+  API_BASE_URL=https://your-api-service.railway.app/api
+  API_KEY=your-api-key
+  TELEGRAM_WEBHOOK_URL=https://your-bot-service.railway.app
+  TELEGRAM_WEBHOOK_SECRET=your-webhook-secret
+  RATE_LIMIT_WINDOW=60000
+  RATE_LIMIT_MAX=30
+  ENABLE_WEBHOOK=true
+  ```
 
 #### Worker Service
 
