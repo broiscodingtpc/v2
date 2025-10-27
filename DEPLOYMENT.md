@@ -16,7 +16,7 @@ The MetaPulse platform consists of four main services:
 ### Quick Fix Checklist (Railway)
 
 - Create separate Railway services for each subdirectory: `apps/web`, `apps/api`, `apps/bot`, and `apps/worker`.
-- Web service: set `NEXT_PUBLIC_API_URL` to your API service URL (no trailing `/api`), `NEXT_PUBLIC_WS_URL` to `wss://<api-service>`, `NEXT_PUBLIC_BOT_USERNAME` to `@metapulsemetabot`, `NEXTAUTH_URL` to your web URL, and `NEXTAUTH_SECRET`.
+ - Web service: set `NEXT_PUBLIC_API_URL` to your API service URL (no trailing `/api`), `NEXT_PUBLIC_WS_URL` to `wss://<api-service>`, and `NEXT_PUBLIC_BOT_USERNAME` to `@metapulsemetabot`.
 - API service: set `PORT=$PORT`, `DATABASE_URL`, `JWT_SECRET`, and `ALLOWED_ORIGINS` to include your web URL (comma-separated if multiple origins).
 - Bot service: set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_URL` to your bot service URL (no `/webhook` suffix; the app appends it), `TELEGRAM_WEBHOOK_SECRET`, and `API_BASE_URL` to `https://<api-service>/api`.
 - Worker service: set `PORT=$PORT`, `DATABASE_URL`, and any external API keys needed.
