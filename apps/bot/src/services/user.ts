@@ -22,10 +22,11 @@ export class UserService {
       // Fallback: return a mock user when API is unavailable
       return {
         id: telegramUser.id.toString(),
-        telegramUserId: telegramUser.id.toString(),
-        handle: telegramUser.username || telegramUser.first_name,
-        role: 'FREE',
-        status: 'ACTIVE',
+        telegramId: telegramUser.id.toString(),
+        username: telegramUser.username,
+        firstName: telegramUser.first_name,
+        lastName: telegramUser.last_name,
+        isActive: true,
         createdAt: new Date().toISOString()
       } as User;
     }
@@ -43,10 +44,11 @@ export class UserService {
       // Fallback: return a mock user when API is unavailable
       return {
         id: telegramId.toString(),
-        telegramUserId: telegramId.toString(),
-        handle: 'user',
-        role: 'FREE',
-        status: 'ACTIVE',
+        telegramId: telegramId.toString(),
+        username: 'user',
+        firstName: 'User',
+        lastName: undefined,
+        isActive: true,
         createdAt: new Date().toISOString()
       } as User;
     }
