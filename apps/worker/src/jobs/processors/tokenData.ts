@@ -1,6 +1,5 @@
 import Bull from 'bull';
 import { dexScreenerService } from '@/services/dexscreener';
-import { pumpPortalService } from '@/services/pumpportal';
 import { createLogger } from '@/utils/logger';
 import { TokenDataJob, Token, DexScreenerPair } from '@/types';
 import db from '@/database';

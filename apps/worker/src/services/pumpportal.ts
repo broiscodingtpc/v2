@@ -1,6 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
 import WebSocket from 'ws';
-import { config } from '@/config';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('pumpportal');
