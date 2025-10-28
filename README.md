@@ -1,6 +1,6 @@
 # MetaPulse
 
-🚀 **AI-Powered Cryptocurrency Analysis Platform**
+🚀 **AI-Powered Cryptocurrency Analysis Platform** - Railway Deployed
 
 MetaPulse is a comprehensive cryptocurrency analysis platform that combines real-time market data, social sentiment analysis, and AI-driven insights to provide intelligent trading signals and market analysis through a sophisticated Telegram bot interface.
 

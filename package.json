@@ -2,7 +2,7 @@
   "name": "metapulse",
   "version": "1.0.0",
   "private": true,
-  "description": "MetaPulse AI - Real-time market intelligence for Solana",
+  "description": "MetaPulse AI - Real-time market intelligence for Solana - Railway Ready",
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm -r --parallel dev",

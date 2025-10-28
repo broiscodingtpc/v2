@@ -1,6 +1,6 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
-  "comment": "Force redeploy - Prisma fix applied",
+  "comment": "Force redeploy - All fixes applied - Prisma + Logger + Lockfile",
   "build": {
     "builder": "NIXPACKS",
     "buildCommand": "pnpm install --no-frozen-lockfile && DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy pnpm --filter @metapulse/db prisma generate && pnpm --filter @metapulse/db build && pnpm --filter @metapulse/shared build && pnpm --filter @metapulse/api build"
