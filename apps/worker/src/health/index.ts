@@ -28,6 +28,7 @@ interface HealthStatus {
     database: ServiceStatus;
     redis: ServiceStatus;
     dexscreener: ServiceStatus;
+    pumpportal: ServiceStatus;
     twitter: ServiceStatus;
     ai: ServiceStatus;
   };

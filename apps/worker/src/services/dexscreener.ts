@@ -163,11 +163,11 @@ export class DexScreenerService {
       // Sort by volume and filter for quality
       pairs = pairs
         .filter(pair => 
-          pair.volume && pair.volume.h24 && parseFloat(pair.volume.h24) > 1000 && // Minimum volume
-          pair.liquidity && pair.liquidity.usd && parseFloat(pair.liquidity.usd) > 5000 && // Minimum liquidity
-          pair.priceChange && pair.priceChange.h24 && parseFloat(pair.priceChange.h24) !== 0 // Has price movement
+          pair.volume && pair.volume.h24 && parseFloat(String(pair.volume.h24)) > 1000 && // Minimum volume
+          pair.liquidity && pair.liquidity.usd && parseFloat(String(pair.liquidity.usd)) > 5000 && // Minimum liquidity
+          pair.priceChange && pair.priceChange.h24 && parseFloat(String(pair.priceChange.h24)) !== 0 // Has price movement
         )
-        .sort((a, b) => parseFloat(b.volume?.h24 || '0') - parseFloat(a.volume?.h24 || '0'))
+        .sort((a, b) => parseFloat(String(b.volume?.h24 || '0')) - parseFloat(String(a.volume?.h24 || '0')))
         .slice(0, limit);
 
       log.info(`Retrieved ${pairs.length} trending tokens`);

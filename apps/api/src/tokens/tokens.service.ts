@@ -275,7 +275,7 @@ export class TokensService {
           });
 
           // Upsert pair
-          await prisma.tokenPair.upsert({
+          await prisma.pair.upsert({
             where: { id: pair.pairAddress },
             update: {
               dexId: pair.dexId,
@@ -286,12 +286,13 @@ export class TokensService {
             },
             create: {
               id: pair.pairAddress,
-              tokenMint: pair.baseToken.address,
+              tokenId: token.id,
               dexId: pair.dexId,
+              base: pair.baseToken.address,
+              quote: pair.quoteToken?.address || 'USDC',
               price: pair.priceUsd ? parseFloat(pair.priceUsd) : 0,
               vol24h: pair.volume ? parseFloat(pair.volume.h24) : 0,
               liqUsd: pair.liquidity ? parseFloat(pair.liquidity.usd) : 0,
-              createdAt: new Date(),
               updatedAt: new Date(),
             },
           });
