@@ -19,7 +19,9 @@ import { HealthModule } from './health/health.module';
       envFilePath: ['.env.local', '.env'],
     }),
     LoggerModule.forRoot({
-      pinoHttp: {
+      pinoHttp: process.env.NODE_ENV === 'production' ? {
+        level: 'info',
+      } : {
         transport: {
           target: 'pino-pretty',
           options: {
