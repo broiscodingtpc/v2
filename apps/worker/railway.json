@@ -15,7 +15,7 @@
     "production": {
       "variables": {
         "NODE_ENV": "production",
-        "PORT": "$PORT",
+        "PORT": 3002,
         "DATABASE_URL": "$DATABASE_URL",
         "REDIS_PUBLIC_URL": "$REDIS_PUBLIC_URL",
         "DEXSCREENER_API_URL": "$DEXSCREENER_API_URL",

@@ -16,7 +16,7 @@
     "production": {
       "variables": {
         "NODE_ENV": "production",
-        "PORT": "$PORT",
+        "PORT": 3000,
         "DATABASE_URL": "$DATABASE_URL",
         "JWT_SECRET": "metapulse-jwt-secret-2024-production-key",
         "REDIS_PUBLIC_URL": "$REDIS_PUBLIC_URL",
