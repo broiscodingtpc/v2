@@ -2,6 +2,7 @@ import { config } from '@/config';
 import { createLogger } from '@/utils/logger';
 import { db } from '@/database';
 import { dexScreenerService } from '@/services/dexscreener';
+import { pumpPortalService } from '@/services/pumpportal';
 import { twitterService } from '@/services/twitter';
 // import { aiService } from '@/services/ai';
 import { getQueueStats } from '@/jobs';
@@ -105,6 +106,7 @@ export class HealthMonitor {
       const [
         databaseHealth,
         dexScreenerHealth,
+        pumpPortalHealth,
         twitterHealth,
         aiHealth,
         // queueHealth, // removed unused variable
@@ -112,6 +114,7 @@ export class HealthMonitor {
       ] = await Promise.allSettled([
         this.checkDatabase(),
         this.checkDexScreener(),
+        this.checkPumpPortal(),
         this.checkTwitter(),
         this.checkAI(),
         this.checkQueues(),
@@ -123,6 +126,7 @@ export class HealthMonitor {
         database: this.processHealthResult(databaseHealth),
         redis: { status: 'healthy' },
         dexscreener: this.processHealthResult(dexScreenerHealth),
+        pumpportal: this.processHealthResult(pumpPortalHealth),
         twitter: this.processHealthResult(twitterHealth),
         ai: this.processHealthResult(aiHealth),
       };
@@ -141,6 +145,7 @@ export class HealthMonitor {
           database: services.database,
           redis: { status: 'healthy' as const },
           dexscreener: services.dexscreener,
+          pumpportal: services.pumpportal,
           twitter: services.twitter,
           ai: services.ai,
         },
@@ -233,6 +238,26 @@ export class HealthMonitor {
         status: 'unhealthy' as const,
         responseTime: Date.now() - startTime,
         error: error instanceof Error ? error.message : 'DexScreener check failed',
+      };
+    }
+  }
+
+  // Check PumpPortal API health
+  private async checkPumpPortal() {
+    const startTime = Date.now();
+    
+    try {
+      const isHealthy = await pumpPortalService.healthCheck();
+      
+      return {
+        status: isHealthy ? 'healthy' : 'degraded',
+        responseTime: Date.now() - startTime,
+      };
+    } catch (error) {
+      return {
+        status: 'unhealthy' as const,
+        responseTime: Date.now() - startTime,
+        error: error instanceof Error ? error.message : 'PumpPortal check failed',
       };
     }
   }

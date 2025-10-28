@@ -1,5 +1,6 @@
 import Bull from 'bull';
 import { dexScreenerService } from '@/services/dexscreener';
+import { pumpPortalService } from '@/services/pumpportal';
 import { createLogger } from '@/utils/logger';
 import { TokenDataJob, Token, DexScreenerPair } from '@/types';
 import db from '@/database';
@@ -146,14 +147,29 @@ async function processIndividualToken(
  */
 async function getPopularTokenAddresses(network: string): Promise<string[]> {
   try {
-    // Get trending tokens from DexScreener
-    const trendingPairs = await dexScreenerService.getTrendingTokens(50);
+    const addresses = new Set<string>();
     
-    // Extract unique token addresses
-    const addresses = [...new Set(trendingPairs.map(pair => pair.baseToken.address))];
+    // Get tokens from DexScreener
+    try {
+      const dexScreenerTokens = await dexScreenerService.searchTokens('solana');
+      dexScreenerTokens.forEach(pair => addresses.add(pair.baseToken.address));
+      log.info(`Retrieved ${dexScreenerTokens.length} tokens from DexScreener`);
+    } catch (error) {
+      log.warn('Failed to get tokens from DexScreener', error);
+    }
     
-    log.info(`Retrieved ${addresses.length} popular token addresses for ${network}`);
-    return addresses;
+    // Get tokens from PumpPortal
+    try {
+      const pumpPortalTokens = await pumpPortalService.getTrendingTokens(30);
+      pumpPortalTokens.forEach(token => addresses.add(token.address));
+      log.info(`Retrieved ${pumpPortalTokens.length} tokens from PumpPortal`);
+    } catch (error) {
+      log.warn('Failed to get tokens from PumpPortal', error);
+    }
+    
+    const addressArray = Array.from(addresses);
+    log.info(`Retrieved ${addressArray.length} unique token addresses for ${network}`);
+    return addressArray.slice(0, 50); // Limit to 50 tokens
 
   } catch (error) {
     log.error(`Failed to get popular tokens for ${network}`, error);

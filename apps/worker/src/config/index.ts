@@ -21,6 +21,7 @@ export const config = {
   DEXSCREENER_API_URL: 'https://api.dexscreener.com/latest',
   COINGECKO_API_URL: 'https://api.coingecko.com/api/v3',
   COINMARKETCAP_API_KEY: process.env.COINMARKETCAP_API_KEY || '',
+  PUMPPORTAL_API_KEY: process.env.PUMPPORTAL_API_KEY || '',
   
   // AI Services
   GROQ_API_KEY: process.env.GROQ_API_KEY || '',

@@ -150,8 +150,8 @@ export class DexScreenerService {
       const startTime = Date.now();
       (this.api.defaults as any).startTime = startTime;
       
-      // DexScreener doesn't have a direct trending endpoint, so we'll get recent pairs
-      const response = await this.api.get('/dex/pairs/solana');
+      // Use search endpoint to get popular Solana tokens
+      const response = await this.api.get('/dex/search?q=solana');
       
       if (!response.data || !response.data.pairs) {
         log.warn('No trending tokens found');
@@ -163,11 +163,11 @@ export class DexScreenerService {
       // Sort by volume and filter for quality
       pairs = pairs
         .filter(pair => 
-          pair.volume.h24 > 1000 && // Minimum volume
-          pair.liquidity.usd > 5000 && // Minimum liquidity
-          pair.priceChange.h24 !== 0 // Has price movement
+          pair.volume && pair.volume.h24 && parseFloat(pair.volume.h24) > 1000 && // Minimum volume
+          pair.liquidity && pair.liquidity.usd && parseFloat(pair.liquidity.usd) > 5000 && // Minimum liquidity
+          pair.priceChange && pair.priceChange.h24 && parseFloat(pair.priceChange.h24) !== 0 // Has price movement
         )
-        .sort((a, b) => b.volume.h24 - a.volume.h24)
+        .sort((a, b) => parseFloat(b.volume?.h24 || '0') - parseFloat(a.volume?.h24 || '0'))
         .slice(0, limit);
 
       log.info(`Retrieved ${pairs.length} trending tokens`);
