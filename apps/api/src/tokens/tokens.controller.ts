@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Param, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Get, Query, Param, NotFoundException } from '@nestjs/common';
 import { TokensService } from './tokens.service';
 import { TokensQueryDto, TrendingQueryDto } from '@metapulse/shared';
 
@@ -31,5 +31,10 @@ export class TokensController {
     }
 
     return token;
+  }
+
+  @Post('populate')
+  async populateTokens() {
+    return await this.tokensService.populateTokensFromDexScreener();
   }
 }

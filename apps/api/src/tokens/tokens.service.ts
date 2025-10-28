@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { prisma } from '@metapulse/db';
 import { TokensQueryDto, TrendingQueryDto } from '@metapulse/shared';
+import axios from 'axios';
 
 @Injectable()
 export class TokensService {
@@ -239,5 +240,85 @@ export class TokensService {
         createdAt: report.createdAt.toISOString(),
       })),
     };
+  }
+
+  async populateTokensFromDexScreener() {
+    try {
+      // Fetch popular Solana tokens from DexScreener
+      const response = await axios.get('https://api.dexscreener.com/latest/dex/tokens/solana');
+      const tokens = response.data.pairs || [];
+
+      const results = {
+        processed: 0,
+        failed: 0,
+        tokens: []
+      };
+
+      for (const pair of tokens.slice(0, 50)) { // Limit to first 50 tokens
+        try {
+          // Upsert token
+          const token = await prisma.token.upsert({
+            where: { mint: pair.baseToken.address },
+            update: {
+              symbol: pair.baseToken.symbol,
+              name: pair.baseToken.name,
+              lastSeenAt: new Date(),
+            },
+            create: {
+              mint: pair.baseToken.address,
+              symbol: pair.baseToken.symbol,
+              name: pair.baseToken.name,
+              chain: 'sol',
+              discoveredAt: new Date(),
+              lastSeenAt: new Date(),
+            },
+          });
+
+          // Upsert pair
+          await prisma.tokenPair.upsert({
+            where: { id: pair.pairAddress },
+            update: {
+              dexId: pair.dexId,
+              price: pair.priceUsd ? parseFloat(pair.priceUsd) : 0,
+              vol24h: pair.volume ? parseFloat(pair.volume.h24) : 0,
+              liqUsd: pair.liquidity ? parseFloat(pair.liquidity.usd) : 0,
+              updatedAt: new Date(),
+            },
+            create: {
+              id: pair.pairAddress,
+              tokenMint: pair.baseToken.address,
+              dexId: pair.dexId,
+              price: pair.priceUsd ? parseFloat(pair.priceUsd) : 0,
+              vol24h: pair.volume ? parseFloat(pair.volume.h24) : 0,
+              liqUsd: pair.liquidity ? parseFloat(pair.liquidity.usd) : 0,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+
+          results.processed++;
+          results.tokens.push({
+            address: token.mint,
+            symbol: token.symbol,
+            name: token.name,
+            price: pair.priceUsd ? parseFloat(pair.priceUsd) : 0,
+            volume24h: pair.volume ? parseFloat(pair.volume.h24) : 0,
+          });
+
+        } catch (error) {
+          console.error(`Failed to process token ${pair.baseToken.address}:`, error);
+          results.failed++;
+        }
+      }
+
+      return {
+        message: 'Tokens populated successfully',
+        results
+      };
+
+    } catch (error) {
+      console.error('Failed to populate tokens:', error);
+      throw new Error('Failed to populate tokens from DexScreener');
+    }
   }
 }

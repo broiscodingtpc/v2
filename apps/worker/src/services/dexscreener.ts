@@ -319,8 +319,8 @@ export class DexScreenerService {
       const startTime = Date.now();
       (this.api.defaults as any).startTime = startTime;
       
-      // Try to fetch a known pair to test connectivity
-      await this.api.get('/dex/pairs/solana', { timeout: 5000 });
+      // Try to search for Solana tokens to test connectivity
+      await this.api.get('/dex/search/?q=solana', { timeout: 5000 });
       return true;
     } catch (error) {
       log.error('DexScreener health check failed', error);
