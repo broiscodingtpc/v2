@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import WebSocket from 'ws';
 import { config } from '@/config';
 import { createLogger } from '@/utils/logger';
 
@@ -21,181 +22,283 @@ export interface PumpPortalToken {
   telegram?: string;
 }
 
-export interface PumpPortalResponse {
-  success: boolean;
-  data: PumpPortalToken[];
-  message?: string;
+export interface PumpPortalWebSocketMessage {
+  method: string;
+  keys?: string[];
+}
+
+export interface PumpPortalNewTokenEvent {
+  type: 'newToken';
+  data: {
+    mint: string;
+    symbol: string;
+    name: string;
+    decimals: number;
+    timestamp: number;
+    creator: string;
+    initialLiquidity: number;
+  };
+}
+
+export interface PumpPortalTradeEvent {
+  type: 'tokenTrade' | 'accountTrade';
+  data: {
+    mint: string;
+    signature: string;
+    timestamp: number;
+    side: 'buy' | 'sell';
+    amount: number;
+    price: number;
+    account: string;
+  };
+}
+
+export interface PumpPortalMigrationEvent {
+  type: 'migration';
+  data: {
+    oldMint: string;
+    newMint: string;
+    timestamp: number;
+    account: string;
+  };
 }
 
 export class PumpPortalService {
-  private api: AxiosInstance;
-  private rateLimitRemaining: number = 60; // 60 requests per minute
-  private rateLimitReset: Date = new Date();
+  private ws: WebSocket | null = null;
+  private wsUrl = 'wss://pumpportal.fun/api/data';
+  private isConnected = false;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 5000; // 5 seconds
+  private subscriptions = new Set<string>();
 
   constructor() {
-    this.api = axios.create({
-      baseURL: 'https://api.pumpportal.io',
-      timeout: 30000,
-      headers: {
-        'User-Agent': 'MetaPulse/1.0',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${config.PUMPPORTAL_API_KEY}`
-      }
-    });
+    this.connect();
+  }
 
-    // Request interceptor for rate limiting
-    this.api.interceptors.request.use((config) => {
-      const now = new Date();
-      if (now < this.rateLimitReset && this.rateLimitRemaining <= 0) {
-        throw new Error(`Rate limit exceeded. Reset at ${this.rateLimitReset.toISOString()}`);
-      }
-      return config;
-    });
-
-    // Response interceptor for logging and rate limit tracking
-    this.api.interceptors.response.use(
-      (response) => {
-        const duration = Date.now() - (response.config as any).startTime;
-        log.apiCall(response.config.url || '', response.config.method || 'GET', response.status, duration);
+  private connect() {
+    try {
+      log.info('Connecting to PumpPortal WebSocket...');
+      
+      this.ws = new WebSocket(this.wsUrl);
+      
+      this.ws.on('open', () => {
+        log.info('Connected to PumpPortal WebSocket');
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
         
-        // Update rate limit info if provided
-        if (response.headers['x-ratelimit-remaining']) {
-          this.rateLimitRemaining = parseInt(response.headers['x-ratelimit-remaining']);
+        // Re-subscribe to all previous subscriptions
+        this.subscriptions.forEach(subscription => {
+          this.sendMessage(JSON.parse(subscription));
+        });
+      });
+
+      this.ws.on('message', (data: WebSocket.Data) => {
+        try {
+          const message = JSON.parse(data.toString());
+          this.handleMessage(message);
+        } catch (error) {
+          log.error('Failed to parse WebSocket message', error);
         }
-        if (response.headers['x-ratelimit-reset']) {
-          this.rateLimitReset = new Date(parseInt(response.headers['x-ratelimit-reset']) * 1000);
-        }
+      });
+
+      this.ws.on('close', (code: number, reason: string) => {
+        log.warn(`PumpPortal WebSocket closed: ${code} - ${reason}`);
+        this.isConnected = false;
+        this.ws = null;
         
-        return response;
-      },
-      (error) => {
-        const duration = Date.now() - (error.config?.startTime || Date.now());
-        log.apiCall(
-          error.config?.url || 'unknown', 
-          error.config?.method || 'GET', 
-          error.response?.status || 0, 
-          duration,
-          { error: error.message }
-        );
-        throw error;
-      }
-    );
-  }
-
-  /**
-   * Get trending tokens from PumpPortal
-   */
-  async getTrendingTokens(limit: number = 50): Promise<PumpPortalToken[]> {
-    try {
-      log.info(`Fetching trending tokens from PumpPortal (limit: ${limit})`);
-      
-      const startTime = Date.now();
-      (this.api.defaults as any).startTime = startTime;
-      
-      const response = await this.api.get('/api/v1/tokens/trending', {
-        params: { limit }
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.reconnectAttempts++;
+          log.info(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${this.reconnectDelay}ms`);
+          setTimeout(() => this.connect(), this.reconnectDelay);
+        } else {
+          log.error('Max reconnection attempts reached. PumpPortal WebSocket disconnected.');
+        }
       });
-      
-      if (!response.data || !response.data.success) {
-        log.warn('No trending tokens found from PumpPortal');
-        return [];
-      }
 
-      const tokens = response.data.data as PumpPortalToken[];
-      log.info(`Retrieved ${tokens.length} trending tokens from PumpPortal`);
-      
-      return tokens;
-    } catch (error) {
-      log.error('Failed to fetch trending tokens from PumpPortal', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get token details by address
-   */
-  async getTokenDetails(address: string): Promise<PumpPortalToken | null> {
-    try {
-      log.info(`Fetching token details from PumpPortal: ${address}`);
-      
-      const startTime = Date.now();
-      (this.api.defaults as any).startTime = startTime;
-      
-      const response = await this.api.get(`/api/v1/tokens/${address}`);
-      
-      if (!response.data || !response.data.success) {
-        log.warn(`No token details found for: ${address}`);
-        return null;
-      }
-
-      const token = response.data.data as PumpPortalToken;
-      log.info(`Retrieved token details for: ${address}`);
-      
-      return token;
-    } catch (error) {
-      log.error(`Failed to fetch token details for: ${address}`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Search tokens by query
-   */
-  async searchTokens(query: string, limit: number = 20): Promise<PumpPortalToken[]> {
-    try {
-      log.info(`Searching tokens on PumpPortal: ${query}`);
-      
-      const startTime = Date.now();
-      (this.api.defaults as any).startTime = startTime;
-      
-      const response = await this.api.get('/api/v1/tokens/search', {
-        params: { q: query, limit }
+      this.ws.on('error', (error: Error) => {
+        log.error('PumpPortal WebSocket error', error);
       });
-      
-      if (!response.data || !response.data.success) {
-        log.warn(`No search results for query: ${query}`);
-        return [];
-      }
 
-      const tokens = response.data.data as PumpPortalToken[];
-      log.info(`Found ${tokens.length} search results for: ${query}`);
-      
-      return tokens;
     } catch (error) {
-      log.error(`Failed to search tokens: ${query}`, error);
-      throw error;
+      log.error('Failed to connect to PumpPortal WebSocket', error);
     }
   }
 
+  private sendMessage(message: PumpPortalWebSocketMessage) {
+    if (this.ws && this.isConnected) {
+      this.ws.send(JSON.stringify(message));
+      log.debug('Sent WebSocket message', message);
+    } else {
+      log.warn('WebSocket not connected, storing subscription for later');
+      this.subscriptions.add(JSON.stringify(message));
+    }
+  }
+
+  private handleMessage(message: any) {
+    log.debug('Received WebSocket message', message);
+    
+    // Process different types of messages
+    if (message.type === 'newToken') {
+      this.handleNewTokenEvent(message);
+    } else if (message.type === 'tokenTrade' || message.type === 'accountTrade') {
+      this.handleTradeEvent(message);
+    } else if (message.type === 'migration') {
+      this.handleMigrationEvent(message);
+    }
+  }
+
+  private handleNewTokenEvent(event: PumpPortalNewTokenEvent) {
+    log.info('New token created', {
+      mint: event.data.mint,
+      symbol: event.data.symbol,
+      name: event.data.name,
+      creator: event.data.creator,
+      liquidity: event.data.initialLiquidity
+    });
+    
+    // Here you can emit events or store data as needed
+    // For now, just log the information
+  }
+
+  private handleTradeEvent(event: PumpPortalTradeEvent) {
+    log.info('Trade event', {
+      mint: event.data.mint,
+      side: event.data.side,
+      amount: event.data.amount,
+      price: event.data.price,
+      account: event.data.account
+    });
+  }
+
+  private handleMigrationEvent(event: PumpPortalMigrationEvent) {
+    log.info('Migration event', {
+      oldMint: event.data.oldMint,
+      newMint: event.data.newMint,
+      account: event.data.account
+    });
+  }
+
   /**
-   * Get rate limit status
+   * Subscribe to new token creation events
    */
-  getRateLimitStatus() {
-    return {
-      remaining: this.rateLimitRemaining,
-      resetTime: this.rateLimitReset,
-      canMakeRequest: this.rateLimitRemaining > 0 || new Date() >= this.rateLimitReset
+  subscribeToNewTokens() {
+    const message: PumpPortalWebSocketMessage = {
+      method: 'subscribeNewToken'
     };
+    this.sendMessage(message);
+    log.info('Subscribed to new token events');
+  }
+
+  /**
+   * Unsubscribe from new token creation events
+   */
+  unsubscribeFromNewTokens() {
+    const message: PumpPortalWebSocketMessage = {
+      method: 'unsubscribeNewToken'
+    };
+    this.sendMessage(message);
+    log.info('Unsubscribed from new token events');
+  }
+
+  /**
+   * Subscribe to token trade events
+   */
+  subscribeToTokenTrades(tokenAddresses: string[]) {
+    const message: PumpPortalWebSocketMessage = {
+      method: 'subscribeTokenTrade',
+      keys: tokenAddresses
+    };
+    this.sendMessage(message);
+    log.info(`Subscribed to trade events for ${tokenAddresses.length} tokens`);
+  }
+
+  /**
+   * Unsubscribe from token trade events
+   */
+  unsubscribeFromTokenTrades(tokenAddresses: string[]) {
+    const message: PumpPortalWebSocketMessage = {
+      method: 'unsubscribeTokenTrade',
+      keys: tokenAddresses
+    };
+    this.sendMessage(message);
+    log.info(`Unsubscribed from trade events for ${tokenAddresses.length} tokens`);
+  }
+
+  /**
+   * Subscribe to account trade events
+   */
+  subscribeToAccountTrades(accountAddresses: string[]) {
+    const message: PumpPortalWebSocketMessage = {
+      method: 'subscribeAccountTrade',
+      keys: accountAddresses
+    };
+    this.sendMessage(message);
+    log.info(`Subscribed to trade events for ${accountAddresses.length} accounts`);
+  }
+
+  /**
+   * Unsubscribe from account trade events
+   */
+  unsubscribeFromAccountTrades(accountAddresses: string[]) {
+    const message: PumpPortalWebSocketMessage = {
+      method: 'unsubscribeAccountTrade',
+      keys: accountAddresses
+    };
+    this.sendMessage(message);
+    log.info(`Unsubscribed from trade events for ${accountAddresses.length} accounts`);
+  }
+
+  /**
+   * Subscribe to migration events
+   */
+  subscribeToMigrations() {
+    const message: PumpPortalWebSocketMessage = {
+      method: 'subscribeMigration'
+    };
+    this.sendMessage(message);
+    log.info('Subscribed to migration events');
+  }
+
+  /**
+   * Unsubscribe from migration events
+   */
+  unsubscribeFromMigrations() {
+    const message: PumpPortalWebSocketMessage = {
+      method: 'unsubscribeMigration'
+    };
+    this.sendMessage(message);
+    log.info('Unsubscribed from migration events');
+  }
+
+  /**
+   * Get connection status
+   */
+  getConnectionStatus() {
+    return {
+      isConnected: this.isConnected,
+      reconnectAttempts: this.reconnectAttempts,
+      subscriptions: Array.from(this.subscriptions)
+    };
+  }
+
+  /**
+   * Disconnect from WebSocket
+   */
+  disconnect() {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+      this.isConnected = false;
+      log.info('Disconnected from PumpPortal WebSocket');
+    }
   }
 
   /**
    * Health check
    */
   async healthCheck(): Promise<boolean> {
-    try {
-      const startTime = Date.now();
-      (this.api.defaults as any).startTime = startTime;
-      
-      // Try to fetch trending tokens to test connectivity
-      await this.api.get('/api/v1/tokens/trending', { 
-        params: { limit: 1 },
-        timeout: 5000 
-      });
-      return true;
-    } catch (error) {
-      log.error('PumpPortal health check failed', error);
-      return false;
-    }
+    return this.isConnected && this.ws !== null;
   }
 }
 

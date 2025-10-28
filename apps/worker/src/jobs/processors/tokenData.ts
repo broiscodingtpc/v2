@@ -158,14 +158,10 @@ async function getPopularTokenAddresses(network: string): Promise<string[]> {
       log.warn('Failed to get tokens from DexScreener', error);
     }
     
-    // Get tokens from PumpPortal
-    try {
-      const pumpPortalTokens = await pumpPortalService.getTrendingTokens(30);
-      pumpPortalTokens.forEach(token => addresses.add(token.address));
-      log.info(`Retrieved ${pumpPortalTokens.length} tokens from PumpPortal`);
-    } catch (error) {
-      log.warn('Failed to get tokens from PumpPortal', error);
-    }
+      // PumpPortal now uses WebSocket for real-time data
+      // We'll rely on DexScreener for initial token discovery
+      // PumpPortal will provide real-time updates via WebSocket
+      log.info('PumpPortal now provides real-time data via WebSocket');
     
     const addressArray = Array.from(addresses);
     log.info(`Retrieved ${addressArray.length} unique token addresses for ${network}`);
