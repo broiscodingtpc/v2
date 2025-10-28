@@ -6,7 +6,7 @@
     "buildCommand": "pnpm install --no-frozen-lockfile && pnpm --filter @metapulse/db build && pnpm --filter @metapulse/shared build && pnpm --filter @metapulse/api build"
   },
   "deploy": {
-    "startCommand": "cd packages/db && DATABASE_URL=$DATABASE_URL pnpm prisma generate && cd ../../apps/api && pnpm start:prod",
+    "startCommand": "cd packages/db && DATABASE_URL=$DATABASE_URL pnpm prisma generate && cd ../../apps/api && PORT=$PORT pnpm start:prod",
     "numReplicas": 1,
     "sleepApplication": false,
     "restartPolicyType": "ON_FAILURE",
@@ -16,7 +16,6 @@
     "production": {
       "variables": {
         "NODE_ENV": "production",
-        "PORT": 3000,
         "DATABASE_URL": "$DATABASE_URL",
         "JWT_SECRET": "metapulse-jwt-secret-2024-production-key",
         "REDIS_PUBLIC_URL": "$REDIS_PUBLIC_URL",
