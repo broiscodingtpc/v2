@@ -6,10 +6,10 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "prebuild": "pnpm prisma:generate",
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').cpSync('src/generated', 'dist/generated', {recursive: true})\"",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "prisma:generate": "DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy prisma generate",
+    "prisma:generate": "cross-env DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
