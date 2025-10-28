@@ -308,6 +308,43 @@ bot.action('help_menu', async (ctx) => {
   });
 });
 
+// Link account handler
+bot.action('link_account', async (ctx) => {
+  const linkMessage = formatSteampunkMessage(`
+╔═══════════════════════════════════════╗
+║         🔗 LINK ACCOUNT 🔗           ║
+╚═══════════════════════════════════════╝
+
+To link your Telegram account with MetaPulse web app:
+
+1️⃣ **Visit the web app:**
+   https://metapulseweb-production.up.railway.app
+
+2️⃣ **Click "Login with Telegram"**
+
+3️⃣ **Start a chat with this bot**
+
+4️⃣ **Send /start command**
+
+5️⃣ **Your accounts will be automatically linked!**
+
+🔗 **Web App:** https://metapulseweb-production.up.railway.app
+  `);
+
+  await ctx.editMessageText(linkMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '🌐 Open Web App', url: 'https://metapulseweb-production.up.railway.app' }
+        ],
+        [
+          { text: '🔙 Back to Menu', callback_data: 'main_menu' }
+        ]
+      ]
+    }
+  });
+});
+
 // Back to main menu handler
 bot.action('main_menu', async (ctx) => {
   const menuMessage = formatSteampunkMessage(`
@@ -394,6 +431,87 @@ bot.hears(/^[A-Z]{2,10}$/, async (ctx) => {
 ❌ Token "${symbol}" not found or error occurred.
 Try a different symbol or contract address.
     `));
+  }
+});
+
+// Callback query handler
+bot.on('callback_query', async (ctx) => {
+  try {
+    const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery ? 
+      ctx.callbackQuery.data : '';
+    
+    if (!callbackData) return;
+
+    // Handle specific callback actions
+    switch (callbackData) {
+      case 'main_menu':
+        await ctx.editMessageText(formatSteampunkMessage(`
+╔═══════════════════════════════════════╗
+║            🎩 MAIN MENU 🎩            ║
+╚═══════════════════════════════════════╝
+
+Choose your adventure in the crypto realm:
+        `), {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '📊 Trading Signals', callback_data: 'signals_menu' },
+                { text: '👁️ My Watchlist', callback_data: 'watchlist_menu' }
+              ],
+              [
+                { text: '🔔 Price Alerts', callback_data: 'alerts_menu' },
+                { text: '📈 Market Analysis', callback_data: 'analysis_menu' }
+              ],
+              [
+                { text: '⚙️ Settings', callback_data: 'settings_menu' },
+                { text: '❓ Help', callback_data: 'help_menu' }
+              ],
+              [
+                { text: '🔗 Link Web Account', callback_data: 'link_account' }
+              ]
+            ]
+          }
+        });
+        break;
+      case 'link_account':
+        await ctx.editMessageText(formatSteampunkMessage(`
+╔═══════════════════════════════════════╗
+║         🔗 LINK ACCOUNT 🔗           ║
+╚═══════════════════════════════════════╝
+
+To link your Telegram account with MetaPulse web app:
+
+1️⃣ **Visit the web app:**
+   https://metapulseweb-production.up.railway.app
+
+2️⃣ **Click "Login with Telegram"**
+
+3️⃣ **Start a chat with this bot**
+
+4️⃣ **Send /start command**
+
+5️⃣ **Your accounts will be automatically linked!**
+
+🔗 **Web App:** https://metapulseweb-production.up.railway.app
+        `), {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '🌐 Open Web App', url: 'https://metapulseweb-production.up.railway.app' }
+              ],
+              [
+                { text: '🔙 Back to Menu', callback_data: 'main_menu' }
+              ]
+            ]
+          }
+        });
+        break;
+      default:
+        await ctx.answerCbQuery('Feature coming soon!');
+    }
+  } catch (error) {
+    logger.error('Callback query error:', error);
+    await ctx.answerCbQuery('Something went wrong!');
   }
 });
 
