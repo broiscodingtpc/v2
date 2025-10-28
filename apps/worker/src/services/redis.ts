@@ -12,7 +12,7 @@ export function makeRedis(): IORedis {
     tls: useTLS
   });
 
-  return new IORedis(config.REDIS_URL, {
+  const redis = new IORedis(config.REDIS_URL, {
     // Avoid request-level hard fails causing unhandled rejections during boot
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
@@ -38,29 +38,31 @@ export function makeRedis(): IORedis {
     family: 4,
     
     // TLS configuration
-    tls: useTLS ? {} : undefined,
-    
-    // Event handlers
-    onConnect: () => {
-      log.info('Redis connected successfully');
-    },
-    
-    onReady: () => {
-      log.info('Redis ready for commands');
-    },
-    
-    onError: (err) => {
-      log.error('Redis connection error:', err);
-    },
-    
-    onClose: () => {
-      log.warn('Redis connection closed');
-    },
-    
-    onReconnecting: () => {
-      log.info('Redis reconnecting...');
-    }
+    ...(useTLS && { tls: {} })
   });
+
+  // Event handlers
+  redis.on('connect', () => {
+    log.info('Redis connected successfully');
+  });
+  
+  redis.on('ready', () => {
+    log.info('Redis ready for commands');
+  });
+  
+  redis.on('error', (err: Error) => {
+    log.error('Redis connection error:', err);
+  });
+  
+  redis.on('close', () => {
+    log.warn('Redis connection closed');
+  });
+  
+  redis.on('reconnecting', () => {
+    log.info('Redis reconnecting...');
+  });
+
+  return redis;
 }
 
 export async function ensureRedisReady(): Promise<boolean> {

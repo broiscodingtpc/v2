@@ -1,4 +1,4 @@
-import WebSocket from 'ws';
+import { WebSocket } from 'ws';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('pumpportal');
@@ -91,7 +91,7 @@ export class PumpPortalService {
         });
       });
 
-      this.ws.on('message', (data: WebSocket.Data) => {
+      this.ws.on('message', (data: Buffer) => {
         try {
           const message = JSON.parse(data.toString());
           this.handleMessage(message);

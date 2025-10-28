@@ -3,7 +3,7 @@ import { config } from '@/config';
 import { createLogger } from '@/utils/logger';
 import { connectDatabase, disconnectDatabase } from '@/database';
 import { healthMonitor } from '@/health';
-import { ensureRedisReady, testRedisConnection } from '@/services/redis';
+import { ensureRedisReady } from '@/services/redis';
 import { 
   initializeJobProcessors, 
   scheduleRecurringJobs, 
