@@ -1,6 +1,7 @@
 import Bull from 'bull';
 import { config } from '@/config';
 import { createLogger } from '@/utils/logger';
+import { makeRedis, testRedisConnection as testRedis } from '@/services/redis';
 import { 
   TokenDataJob, 
   SocialDataJob, 
@@ -11,16 +12,12 @@ import {
 
 const log = createLogger('jobs');
 
-// Job Queue Configuration
+// Create Redis connection
+const redisConnection = makeRedis();
+
+// Job Queue Configuration with robust Redis connection
 const queueConfig = {
-  redis: {
-    host: config.REDIS_HOST,
-    port: config.REDIS_PORT,
-    password: config.REDIS_PASSWORD || undefined,
-    maxRetriesPerRequest: 3,
-    retryDelayOnFailover: 100,
-    lazyConnect: true
-  },
+  redis: redisConnection,
   defaultJobOptions: {
     removeOnComplete: 100,
     removeOnFail: 50,
@@ -32,12 +29,35 @@ const queueConfig = {
   }
 };
 
-// Create job queues
-export const tokenDataQueue = new Bull('token-data', queueConfig as any);
-export const socialDataQueue = new Bull('social-data', queueConfig as any);
-export const aiAnalysisQueue = new Bull('ai-analysis', queueConfig as any);
-export const signalGenerationQueue = new Bull('signal-generation', queueConfig as any);
-export const cleanupQueue = new Bull('cleanup', queueConfig as any);
+// Create job queues with error handling
+let tokenDataQueue: Bull.Queue;
+let socialDataQueue: Bull.Queue;
+let aiAnalysisQueue: Bull.Queue;
+let signalGenerationQueue: Bull.Queue;
+let cleanupQueue: Bull.Queue;
+
+try {
+  tokenDataQueue = new Bull('token-data', queueConfig as any);
+  socialDataQueue = new Bull('social-data', queueConfig as any);
+  aiAnalysisQueue = new Bull('ai-analysis', queueConfig as any);
+  signalGenerationQueue = new Bull('signal-generation', queueConfig as any);
+  cleanupQueue = new Bull('cleanup', queueConfig as any);
+  
+  log.info('Job queues created successfully');
+} catch (error) {
+  log.error('Failed to create job queues:', error);
+  throw error;
+}
+
+// Export queues
+export { 
+  tokenDataQueue, 
+  socialDataQueue, 
+  aiAnalysisQueue, 
+  signalGenerationQueue, 
+  cleanupQueue,
+  testRedis as testRedisConnection
+};
 
 // Job processors
 import { processTokenData } from './processors/tokenData';

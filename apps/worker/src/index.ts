@@ -3,6 +3,7 @@ import { config } from '@/config';
 import { createLogger } from '@/utils/logger';
 import { connectDatabase, disconnectDatabase } from '@/database';
 import { healthMonitor } from '@/health';
+import { ensureRedisReady, testRedisConnection } from '@/services/redis';
 import { 
   initializeJobProcessors, 
   scheduleRecurringJobs, 
@@ -27,6 +28,30 @@ class WorkerService {
     this.setupMiddleware();
     this.setupRoutes();
     this.setupErrorHandling();
+    this.setupProcessHandlers();
+  }
+
+  // Setup process error handlers
+  private setupProcessHandlers() {
+    // Guard against unhandled rejections (don't auto-SIGTERM yourself)
+    process.on('unhandledRejection', (reason, p) => {
+      this.logger.error('Unhandled Rejection', { reason, promise: p });
+      // DO NOT process.exit(1) — keep running and let retry logic handle it
+    });
+
+    process.on('uncaughtException', (err) => {
+      this.logger.error('Uncaught Exception', err);
+      // Decide if you must exit; usually better to keep running and rely on retries
+      // Only exit if it's a critical error that can't be recovered
+      if (err.message.includes('EADDRINUSE') || err.message.includes('EACCES')) {
+        this.logger.error('Critical error, exiting:', err);
+        process.exit(1);
+      }
+    });
+
+    // Graceful shutdown handlers
+    process.on('SIGTERM', () => this.gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => this.gracefulShutdown('SIGINT'));
   }
 
   // Setup Express middleware
@@ -185,21 +210,7 @@ class WorkerService {
       });
     });
 
-    // Handle uncaught exceptions
-    process.on('uncaughtException', (error) => {
-      this.logger.error('Uncaught Exception', { error: error.message, stack: error.stack });
-      this.gracefulShutdown('SIGTERM');
-    });
-
-    // Handle unhandled promise rejections
-    process.on('unhandledRejection', (reason, promise) => {
-      this.logger.error('Unhandled Rejection', { reason, promise });
-      this.gracefulShutdown('SIGTERM');
-    });
-
-    // Handle process signals
-    process.on('SIGTERM', () => this.gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => this.gracefulShutdown('SIGINT'));
+    // Note: Process handlers are set up in setupProcessHandlers()
   }
 
   // Initialize all services
@@ -215,35 +226,70 @@ class WorkerService {
       await connectDatabase();
       this.logger.info('Database connected successfully');
 
-      // Initialize job queues
-      this.logger.info('Initializing job queues...');
-      await initializeJobProcessors();
-      this.logger.info('Job queues initialized successfully');
-
-      // Schedule recurring jobs
-      this.logger.info('Scheduling recurring jobs...');
-      await scheduleRecurringJobs();
-      this.logger.info('Recurring jobs scheduled successfully');
+      // Start HTTP server first so the platform doesn't mark you dead
+      await this.startServer();
+      this.logger.info('HTTP server started');
 
       // Start health monitoring
       this.logger.info('Starting health monitoring...');
       healthMonitor.startMonitoring();
       this.logger.info('Health monitoring started');
 
-      // Start HTTP server
-      await this.startServer();
+      // Test Redis connection (but don't fail if it's down)
+      this.logger.info('Testing Redis connection...');
+      const redisReady = await ensureRedisReady();
+      if (!redisReady) {
+        this.logger.warn('Redis not ready yet, will retry later');
+      } else {
+        this.logger.info('Redis connection test passed');
+      }
+
+      // Initialize job queues with error handling
+      try {
+        this.logger.info('Initializing job queues...');
+        await initializeJobProcessors();
+        this.logger.info('Job queues initialized successfully');
+
+        // Schedule recurring jobs
+        this.logger.info('Scheduling recurring jobs...');
+        await scheduleRecurringJobs();
+        this.logger.info('Recurring jobs scheduled successfully');
+
+        // Add initial jobs to kickstart the system
+        this.logger.info('Adding initial jobs...');
+        await this.addInitialJobs();
+      } catch (error) {
+        this.logger.error('Failed to start queues:', error);
+        // Keep the service up; optionally retry later
+        this.scheduleQueueRetry();
+      }
 
       this.logger.info('MetaPulse Worker Service initialized successfully', {
         port: config.PORT,
       });
 
-      // Add initial jobs to kickstart the system
-      await this.addInitialJobs();
-
     } catch (error) {
       this.logger.error('Failed to initialize worker service', { error });
       throw error;
     }
+  }
+
+  // Schedule retry for queues if they failed to start
+  private scheduleQueueRetry() {
+    const retryInterval = 30000; // 30 seconds
+    this.logger.info(`Scheduling queue retry in ${retryInterval}ms`);
+    
+    setTimeout(async () => {
+      try {
+        this.logger.info('Retrying queue initialization...');
+        await initializeJobProcessors();
+        await scheduleRecurringJobs();
+        this.logger.info('Queues started successfully on retry');
+      } catch (error) {
+        this.logger.error('Queue retry failed:', error);
+        this.scheduleQueueRetry(); // Try again
+      }
+    }, retryInterval);
   }
 
   // Start HTTP server

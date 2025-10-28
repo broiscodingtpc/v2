@@ -12,10 +12,17 @@ export const config = {
   DATABASE_URL: process.env.DATABASE_URL || '',
   
   // Redis Configuration (for Bull queues)
-  REDIS_URL: process.env.REDIS_PUBLIC_URL || process.env.REDIS_URL || 'redis://localhost:6379',
+  REDIS_URL: process.env.REDIS_URL || process.env.REDIS_PUBLIC_URL || 'redis://localhost:6379',
   REDIS_HOST: process.env.REDIS_HOST || 'localhost',
   REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379'),
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
+  REDIS_DB: parseInt(process.env.REDIS_DB || '0'),
+  
+  // Redis Connection Options
+  REDIS_CONNECT_TIMEOUT: parseInt(process.env.REDIS_CONNECT_TIMEOUT || '10000'),
+  REDIS_COMMAND_TIMEOUT: parseInt(process.env.REDIS_COMMAND_TIMEOUT || '5000'),
+  REDIS_MAX_RETRIES: parseInt(process.env.REDIS_MAX_RETRIES || '3'),
+  REDIS_RETRY_DELAY: parseInt(process.env.REDIS_RETRY_DELAY || '100'),
   
   // External APIs
   DEXSCREENER_API_URL: process.env.DEXSCREENER_API_URL || 'https://api.dexscreener.com',
