@@ -17,6 +17,7 @@
         "NODE_ENV": "production",
         "PORT": "$PORT",
         "NEXT_PUBLIC_API_URL": "https://metapulseapi-production.up.railway.app",
+        "NEXT_PUBLIC_WS_URL": "wss://metapulseapi-production.up.railway.app",
         "NEXT_PUBLIC_BOT_USERNAME": "@metapulsemetabot"
       }
     }

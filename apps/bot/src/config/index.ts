@@ -21,8 +21,7 @@ export const config = {
   DATABASE_URL: process.env.DATABASE_URL || '',
   
   // External APIs
-  DEXSCREENER_API_URL: 'https://api.dexscreener.com/latest',
-  COINGECKO_API_URL: 'https://api.coingecko.com/api/v3',
+  DEXSCREENER_API_URL: process.env.DEXSCREENER_API_URL || 'https://api.dexscreener.com',
   
   // AI Services
   GROQ_API_KEY: process.env.GROQ_API_KEY || '',

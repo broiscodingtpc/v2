@@ -12,15 +12,13 @@ export const config = {
   DATABASE_URL: process.env.DATABASE_URL || '',
   
   // Redis Configuration (for Bull queues)
-  REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
+  REDIS_URL: process.env.REDIS_PUBLIC_URL || process.env.REDIS_URL || 'redis://localhost:6379',
   REDIS_HOST: process.env.REDIS_HOST || 'localhost',
   REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379'),
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
   
   // External APIs
-  DEXSCREENER_API_URL: 'https://api.dexscreener.com/latest',
-  COINGECKO_API_URL: 'https://api.coingecko.com/api/v3',
-  COINMARKETCAP_API_KEY: process.env.COINMARKETCAP_API_KEY || '',
+  DEXSCREENER_API_URL: process.env.DEXSCREENER_API_URL || 'https://api.dexscreener.com',
   PUMPPORTAL_API_KEY: process.env.PUMPPORTAL_API_KEY || '',
   
   // AI Services
@@ -32,9 +30,9 @@ export const config = {
   // Twitter/X API
   TWITTER_BEARER_TOKEN: process.env.TWITTER_BEARER_TOKEN || '',
   TWITTER_API_KEY: process.env.TWITTER_API_KEY || '',
-  TWITTER_API_SECRET: process.env.TWITTER_API_SECRET || '',
+  TWITTER_API_KEY_SECRET: process.env.TWITTER_API_KEY_SECRET || '',
   TWITTER_ACCESS_TOKEN: process.env.TWITTER_ACCESS_TOKEN || '',
-  TWITTER_ACCESS_SECRET: process.env.TWITTER_ACCESS_SECRET || '',
+  TWITTER_ACCESS_TOKEN_SECRET: process.env.TWITTER_ACCESS_TOKEN_SECRET || '',
   
   // Job Configuration
   JOB_CONCURRENCY: parseInt(process.env.JOB_CONCURRENCY || '5'),

@@ -49,8 +49,11 @@ The MetaPulse Web Frontend is a modern, responsive web application built with Ne
                        │  External APIs  │
                        │                 │
                        │  • Telegram     │
-                       │  • Analytics    │
-                       │  • CDN Assets   │
+                       │  • DexScreener  │
+                       │  • PumpPortal   │
+                       │  • Twitter      │
+                       │  • Groq AI      │
+                       │  • Gemini AI    │
                        └─────────────────┘
 ```
 
@@ -119,7 +122,7 @@ const nextConfig = {
     appDir: true,
   },
   images: {
-    domains: ['assets.coingecko.com', 'logos.covalenthq.com'],
+    domains: ['api.dexscreener.com', 'pbs.twimg.com'],
   },
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,

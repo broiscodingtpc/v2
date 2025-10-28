@@ -22,7 +22,7 @@ A sophisticated Telegram bot that provides real-time cryptocurrency market analy
 
 ### 🔗 Integration
 - **MetaPulse API** - Seamless integration with backend services
-- **External APIs** - DexScreener, CoinGecko data sources
+- **External APIs** - DexScreener, PumpPortal data sources
 - **Webhook Support** - Production-ready webhook configuration
 - **Health Monitoring** - Built-in health checks and monitoring
 

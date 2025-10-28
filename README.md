@@ -13,7 +13,7 @@ MetaPulse is a comprehensive cryptocurrency analysis platform that combines real
 - **Market Predictions** - AI-generated market forecasts and trend analysis
 
 ### 📊 Real-Time Data Processing
-- **Multi-Source Integration** - DexScreener, Twitter, CoinGecko, CoinMarketCap
+- **Multi-Source Integration** - DexScreener, PumpPortal, Twitter APIs
 - **Live Price Tracking** - Real-time token price and volume monitoring
 - **Social Media Monitoring** - Twitter mentions and trending topic analysis
 - **Background Processing** - Automated data collection and analysis jobs
@@ -47,8 +47,8 @@ MetaPulse is a comprehensive cryptocurrency analysis platform that combines real
 │  Worker Service │    │   Data Sources  │    │    Database     │
 │                 │    │                 │    │                 │
 │  • Job Queues   │───▶│  • DexScreener  │    │  • PostgreSQL   │
-│  • AI Services  │    │  • Twitter API  │    │  • Redis Cache  │
-│  • Processors   │    │  • CoinGecko    │    │  • Prisma ORM   │
+│  • AI Services  │    │  • PumpPortal   │    │  • Redis Cache  │
+│  • Processors   │    │  • Twitter API  │    │  • Prisma ORM   │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 

@@ -48,8 +48,10 @@ The MetaPulse API service is a robust, scalable backend built with NestJS that p
                        │  External APIs  │
                        │                 │
                        │  • DexScreener  │
-                       │  • CoinGecko    │
+                       │  • PumpPortal   │
                        │  • Twitter      │
+                       │  • Groq AI      │
+                       │  • Gemini AI    │
                        └─────────────────┘
 ```
 
@@ -116,8 +118,10 @@ The MetaPulse API service is a robust, scalable backend built with NestJS that p
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `DEXSCREENER_API_URL` | DexScreener API endpoint | ✅ |
-| `COINGECKO_API_KEY` | CoinGecko API key | ❌ |
-| `COINMARKETCAP_API_KEY` | CoinMarketCap API key | ❌ |
+| `PUMPPORTAL_API_KEY` | PumpPortal API key | ❌ |
+| `TWITTER_BEARER_TOKEN` | Twitter Bearer Token | ❌ |
+| `GROQ_API_KEY` | Groq AI API key | ❌ |
+| `GEMINI_API_KEY` | Gemini AI API key | ❌ |
 
 ## 📊 API Endpoints
 

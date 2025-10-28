@@ -6,6 +6,7 @@ The MetaPulse Worker Service is a robust background processing system that handl
 
 ### Data Ingestion
 - **DexScreener Integration**: Real-time token data, price metrics, and market statistics
+- **PumpPortal Integration**: WebSocket-based token creation and trading events
 - **Twitter API Integration**: Social sentiment analysis and trending topic detection
 - **Multi-source Data**: Aggregates data from various cryptocurrency APIs
 
@@ -39,8 +40,8 @@ The MetaPulse Worker Service is a robust background processing system that handl
 │   Data Sources  │    │  Worker Service │    │    Database     │
 │                 │    │                 │    │                 │
 │  • DexScreener  │───▶│  • Job Queues   │───▶│  • PostgreSQL   │
-│  • Twitter API  │    │  • AI Services  │    │  • Prisma ORM   │
-│  • CoinGecko    │    │  • Processors   │    │  • Data Models  │
+│  • PumpPortal   │    │  • AI Services  │    │  • Prisma ORM   │
+│  • Twitter API  │    │  • Processors   │    │  • Data Models  │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                               │
                               ▼

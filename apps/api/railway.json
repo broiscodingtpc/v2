@@ -17,7 +17,19 @@
       "variables": {
         "NODE_ENV": "production",
         "PORT": "$PORT",
-        "DATABASE_URL": "$DATABASE_URL"
+        "DATABASE_URL": "$DATABASE_URL",
+        "JWT_SECRET": "metapulse-jwt-secret-2024-production-key",
+        "REDIS_PUBLIC_URL": "$REDIS_PUBLIC_URL",
+        "DEXSCREENER_API_URL": "$DEXSCREENER_API_URL",
+        "PUMPPORTAL_API_KEY": "$PUMPPORTAL_API_KEY",
+        "TWITTER_BEARER_TOKEN": "$TWITTER_BEARER_TOKEN",
+        "TWITTER_API_KEY": "$TWITTER_API_KEY",
+        "TWITTER_API_KEY_SECRET": "$TWITTER_API_KEY_SECRET",
+        "TWITTER_ACCESS_TOKEN": "$TWITTER_ACCESS_TOKEN",
+        "TWITTER_ACCESS_TOKEN_SECRET": "$TWITTER_ACCESS_TOKEN_SECRET",
+        "GROQ_API_KEY": "$GROQ_API_KEY",
+        "GEMINI_API_KEY": "$GEMINI_API_KEY",
+        "ALLOWED_ORIGINS": "https://metapulseweb-production.up.railway.app,https://metapulsebot-production.up.railway.app"
       }
     }
   }

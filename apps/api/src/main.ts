@@ -1,7 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -11,12 +10,9 @@ async function bootstrap() {
     console.log('Port:', process.env.PORT);
     console.log('Database URL:', process.env.DATABASE_URL ? 'configured' : 'missing');
     
-    const app = await NestFactory.create(AppModule, { bufferLogs: true });
+    const app = await NestFactory.create(AppModule);
     
     const configService = app.get(ConfigService);
-    const logger = app.get(Logger);
-    
-    app.useLogger(logger);
   
   // Global validation pipe
   app.useGlobalPipes(new ValidationPipe({
@@ -44,7 +40,7 @@ async function bootstrap() {
     const port = configService.get<number>('PORT') || 3001;
     await app.listen(port);
     
-    logger.log(`🚀 API server running on port ${port}`, 'Bootstrap');
+    console.log(`🚀 API server running on port ${port}`);
   } catch (error) {
     console.error('Failed to start API server:', error);
     process.exit(1);
