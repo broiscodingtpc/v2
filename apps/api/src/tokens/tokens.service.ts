@@ -286,7 +286,9 @@ export class TokensService {
             },
             create: {
               id: pair.pairAddress,
-              tokenId: token.id,
+              token: {
+                connect: { id: token.id }
+              },
               dexId: pair.dexId,
               base: pair.baseToken.address,
               quote: pair.quoteToken?.address || 'USDC',
