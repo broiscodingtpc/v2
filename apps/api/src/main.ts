@@ -20,10 +20,16 @@ async function bootstrap() {
   }));
 
   // CORS configuration
-  const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS')?.split(',') || ['http://localhost:3000'];
+  const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS')?.split(',') || [
+    'http://localhost:3000',
+    'https://metapulseweb-production.up.railway.app',
+    'https://metapulsebot-production.up.railway.app'
+  ];
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
   });
 
   // Global prefix

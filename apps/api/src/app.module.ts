@@ -4,6 +4,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 import { TokensModule } from './tokens/tokens.module';
 import { WatchlistModule } from './watchlist/watchlist.module';
 import { SignalsModule } from './signals/signals.module';
@@ -37,6 +38,7 @@ import { HealthModule } from './health/health.module';
       },
     ]),
     AuthModule,
+    UsersModule,
     TokensModule,
     WatchlistModule,
     SignalsModule,
