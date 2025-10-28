@@ -5,12 +5,18 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
-  
-  const configService = app.get(ConfigService);
-  const logger = app.get(Logger);
-  
-  app.useLogger(logger);
+  try {
+    console.log('Starting API server...');
+    console.log('Environment:', process.env.NODE_ENV);
+    console.log('Port:', process.env.PORT);
+    console.log('Database URL:', process.env.DATABASE_URL ? 'configured' : 'missing');
+    
+    const app = await NestFactory.create(AppModule, { bufferLogs: true });
+    
+    const configService = app.get(ConfigService);
+    const logger = app.get(Logger);
+    
+    app.useLogger(logger);
   
   // Global validation pipe
   app.useGlobalPipes(new ValidationPipe({
@@ -35,10 +41,17 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix('api');
 
-  const port = configService.get<number>('PORT') || 3001;
-  await app.listen(port);
-  
-  logger.log(`🚀 API server running on port ${port}`, 'Bootstrap');
+    const port = configService.get<number>('PORT') || 3001;
+    await app.listen(port);
+    
+    logger.log(`🚀 API server running on port ${port}`, 'Bootstrap');
+  } catch (error) {
+    console.error('Failed to start API server:', error);
+    process.exit(1);
+  }
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  console.error('Bootstrap failed:', error);
+  process.exit(1);
+});
