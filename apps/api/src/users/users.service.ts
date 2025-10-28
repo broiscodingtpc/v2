@@ -13,7 +13,6 @@ export class UsersService {
         role: true,
         status: true,
         createdAt: true,
-        updatedAt: true,
       },
     });
 
@@ -34,7 +33,6 @@ export class UsersService {
         role: true,
         status: true,
         createdAt: true,
-        updatedAt: true,
       },
     });
 
@@ -50,7 +48,7 @@ export class UsersService {
       data: {
         telegramUserId: telegramData.id.toString(),
         handle: telegramData.username || `user_${telegramData.id}`,
-        role: 'USER',
+        role: 'FREE',
         status: 'ACTIVE',
       },
       select: {
@@ -60,7 +58,6 @@ export class UsersService {
         role: true,
         status: true,
         createdAt: true,
-        updatedAt: true,
       },
     });
   }
