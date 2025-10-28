@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "pnpm install --frozen-lockfile && cd apps/bot && pnpm build"
+    "buildCommand": "pnpm install --no-frozen-lockfile && cd apps/bot && pnpm build"
   },
   "deploy": {
     "startCommand": "cd apps/bot && pnpm start",
