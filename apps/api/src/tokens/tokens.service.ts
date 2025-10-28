@@ -293,7 +293,6 @@ export class TokensService {
               price: pair.priceUsd ? parseFloat(pair.priceUsd) : 0,
               vol24h: pair.volume ? parseFloat(pair.volume.h24) : 0,
               liqUsd: pair.liquidity ? parseFloat(pair.liquidity.usd) : 0,
-              updatedAt: new Date(),
             },
           });
 
